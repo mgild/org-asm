@@ -29,7 +29,7 @@ At 60fps with 39 frame fields, the flat buffer protocol makes **60 boundary cros
 │  tick(now_ms) → F (generic frame)    │
 │  One WASM call per frame             │
 └──────────────────┬───────────────────┘
-                   │ Float64Array
+                   │ Frame (FlatBuffer)
 ┌──────────────────▼───────────────────┐
 │          VIEW (TypeScript)           │
 │  AnimationLoop    → orchestrates     │
@@ -106,9 +106,7 @@ Build:
 wasm-pack build crates/my-engine --target web --release
 ```
 
-### 2. Choose Your Frame Format
-
-#### Option A: FlatBuffers (recommended for new projects)
+### 2. Define Your Frame Schema
 
 Define a `.fbs` schema — the single source of truth for both Rust and TypeScript:
 
@@ -136,43 +134,14 @@ flatc --ts  -o src/generated/ schema/frame.fbs
 
 No custom codegen tool needed — `flatc` handles everything.
 
-#### Option B: Float64Array (simpler, still fully supported)
-
-Annotate your Rust `F_*` constants with type hints in trailing comments:
-
-```rust
-const F_INTENSITY: usize = 0;  // f64 - Smoothed value
-const F_IS_ACTIVE: usize = 1;  // bool - Active flag
-const F_COLOR_R: usize = 2;    // u8 - Red channel
-const FRAME_SIZE: usize = 3;
-```
-
-Create your TypeScript schema manually or with a codegen tool:
-
-```ts
-import { FrameBufferFactory } from 'org-asm';
-
-export const schema = FrameBufferFactory.createSchema([
-  { name: 'INTENSITY', offset: 0, type: 'f64' },
-  { name: 'IS_ACTIVE', offset: 1, type: 'bool' },
-  { name: 'COLOR_R', offset: 2, type: 'u8' },
-]);
-
-export const F = FrameBufferFactory.createOffsets<'INTENSITY' | 'IS_ACTIVE' | 'COLOR_R'>(schema);
-
-export const FRAME_SIZE = 3;
-```
-
 ### 3. Wire the Animation Loop
 
 ```ts
 import {
   AnimationLoop,
   EffectApplicator,
-  ChartDataConsumer,
   ThrottledStateSync,
-  flatBufferTickAdapter,  // FlatBuffers path
-  zeroCopyTickAdapter,    // Float64Array path
+  flatBufferTickAdapter,
 } from 'org-asm';
 import init, { Engine } from '../pkg/my_engine';
 import { Frame } from './generated/frame';
@@ -181,11 +150,12 @@ import { ByteBuffer } from 'flatbuffers';
 const wasm = await init();
 const engine = new Engine();
 
-// --- FlatBuffers path (recommended) ---
+// Zero-copy tick: reads FlatBuffer frame directly from WASM memory
 const tickSource = flatBufferTickAdapter(engine, wasm.memory,
   bytes => Frame.getRootAsFrame(new ByteBuffer(bytes)));
 const loop = new AnimationLoop(tickSource);
 
+// Declarative DOM effects — type-safe extractors from the schema
 const effects = new EffectApplicator();
 effects
   .bindCSSProperty('root', '--glow-alpha', f => f.intensity())
@@ -196,6 +166,7 @@ effects
   });
 effects.bind('root', document.getElementById('app')!);
 
+// Throttled React state bridge (100ms = ~10fps)
 const stateSync = new ThrottledStateSync(100);
 stateSync
   .setActiveFlag(f => f.isActive())
@@ -204,11 +175,10 @@ stateSync
     f => f.intensity(),
   );
 
-// --- Float64Array alternative ---
-// const tickSource = zeroCopyTickAdapter(engine, wasm.memory, FRAME_SIZE);
-// const loop = new AnimationLoop(tickSource);
-// effects.bindCSSProperty('root', '--glow-alpha', f => f[F.INTENSITY]);
-// stateSync.setActiveFlag(f => f[F.IS_ACTIVE] > 0.5);
+// Start — consumers run in priority order
+loop.addConsumer(effects);     // priority 10: DOM effects
+loop.addConsumer(stateSync);   // priority 20: React last
+loop.start();
 ```
 
 ### 4. Connect a Data Source
@@ -287,7 +257,7 @@ Creates type-safe offset maps from schema definitions. Validates no offset colli
 
 #### `AnimationLoop`
 
-60fps `requestAnimationFrame` loop. Calls `engine.tick()` once per frame, distributes the `Float64Array` to consumers in priority order.
+60fps `requestAnimationFrame` loop. Calls `engine.tick()` once per frame, distributes the frame to consumers in priority order.
 
 #### `EffectApplicator` (priority: 10)
 
@@ -353,28 +323,30 @@ Module-level mutable state for 60fps data that bypasses React entirely.
 
 ## Frame Access Patterns
 
-### Extractor functions (generic, works with any frame type)
+Consumers use extractor functions that read values from the frame. Since the frame type is generic, extractors work with any representation — FlatBuffers, typed arrays, plain objects, etc.
+
 ```ts
+// Bind DOM effects to frame fields
 effects.bindCSSProperty('root', '--value', f => f.intensity());
+effects.bindTransform('container', f => f.shakeIntensity(), v => `translate(${v}px, 0)`);
+
+// Sync to React state
 stateSync.addMapping(handler, f => f.score(), f => f.elapsed());
+stateSync.setActiveFlag(f => f.isActive());
+
+// Conditional mapping — fires immediately when flag is true
+stateSync.addConditionalMapping(f => f.sessionEnded(), frame => {
+  store.getState().endSession(frame.finalScore());
+});
 ```
 
-### Float64Array offsets (backward compatible)
-```ts
-effects.bindCSSProperty('root', '--value', f => f[F.INTENSITY]);
-stateSync.addMapping(handler, f => f[F.SCORE], f => f[F.ELAPSED]);
-```
+### FlatBuffers Schema Types
 
-## Frame Buffer Conventions
-
-| Type | Encoding | Read Pattern |
-|------|----------|-------------|
-| **f64** | Raw number | `frame[F.VALUE]` |
-| **bool** | `0.0` / `1.0` | `frame[F.FLAG] > 0.5` |
-| **u8** (color) | `0-255` as f64 | `Math.round(frame[F.COLOR_R])` |
-| **one-frame flag** | Set to `1.0`, engine clears next tick | Handler must be idempotent |
-
-Rust constants use `F_` prefix. TypeScript offsets use no prefix. Both sides must match exactly.
+| FlatBuffers Type | Rust Type | TypeScript Accessor |
+|------------------|-----------|---------------------|
+| `double` | `f64` | `frame.intensity()` |
+| `bool` | `bool` | `frame.isActive()` |
+| `ubyte` | `u8` | `frame.colorR()` |
 
 ## Consumer Priority Order
 
@@ -388,7 +360,7 @@ If a frame budget is exceeded, higher-priority consumers still receive their dat
 
 ## Performance Design
 
-- **1 WASM call per frame** — `tick()` returns everything as a single `Float64Array`
+- **1 WASM call per frame** — `tick()` returns everything as a single frame (FlatBuffer or typed array)
 - **Zero allocations in the JS render loop** — frame buffer comes from WASM linear memory
 - **Version-gated data copies** — chart data only copied when `data_version()` changes
 - **Throttled React updates** — 60fps data reaches React at ~10fps via `ThrottledStateSync`
