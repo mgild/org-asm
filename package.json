@@ -37,6 +37,10 @@
     "schema",
     "model/engine-template.rs",
     "model/Cargo.template.toml",
+    "server/engine-trait.rs",
+    "server/broadcast.rs",
+    "server/main-template.rs",
+    "server/Cargo.template.toml",
     "guides"
   ],
   "scripts": {
@@ -54,7 +58,10 @@
     "60fps",
     "frame-buffer",
     "zero-copy",
-    "mvc"
+    "mvc",
+    "server",
+    "orderbook",
+    "websocket"
   ],
   "license": "MIT",
   "dependencies": {

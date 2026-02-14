@@ -24,9 +24,17 @@ At 60fps with 39 frame fields, the flat buffer protocol makes **60 boundary cros
 
 ```
 ┌──────────────────────────────────────┐
+│   SERVER ENGINE (Rust/Axum)          │
+│   Optional upstream data processor   │
+│   ServerEngine trait → ingest/tick   │
+│   FlatBuffer serialize → broadcast   │
+└──────────────────┬───────────────────┘
+                   │ Binary WebSocket (FlatBuffer bytes)
+┌──────────────────▼───────────────────┐
 │          MODEL (Rust WASM)           │
 │  Engine struct owns ALL state        │
 │  tick(now_ms) → F (generic frame)    │
+│  ingest_frame(&[u8]) ← server bytes │
 │  One WASM call per frame             │
 └──────────────────┬───────────────────┘
                    │ Frame (FlatBuffer)
@@ -41,6 +49,7 @@ At 60fps with 39 frame fields, the flat buffer protocol makes **60 boundary cros
 ┌──────────────────▼───────────────────┐
 │       CONTROLLER (TypeScript)        │
 │  WebSocketPipeline → data ingestion  │
+│  BinaryFrameParser → binary frames   │
 │  InputController   → user actions    │
 │  MessageParser     → data routing    │
 │  WasmBridge        → WASM lifecycle  │
@@ -212,7 +221,53 @@ ws.connect();
 
 The raw WebSocket string goes straight to WASM. No `JSON.parse`, no JS object allocation, no field extraction in TypeScript.
 
-### 5. Handle User Input
+### 5. Server Engine (Optional)
+
+For high-frequency data like orderbooks, run a server engine in native Rust that ingests exchange data and broadcasts FlatBuffer frames to all browser clients:
+
+```bash
+cp node_modules/org-asm/server/engine-trait.rs my-server/src/engine_trait.rs
+cp node_modules/org-asm/server/broadcast.rs my-server/src/broadcast.rs
+cp node_modules/org-asm/server/main-template.rs my-server/src/main.rs
+cp node_modules/org-asm/server/Cargo.template.toml my-server/Cargo.toml
+```
+
+Implement the `ServerEngine` trait for your exchange:
+
+```rust
+impl ServerEngine for OrderbookEngine {
+    fn ingest(&mut self, msg: &[u8]) -> bool {
+        // Parse exchange message, update orderbook state
+        true
+    }
+
+    fn tick<'a>(&mut self, builder: &'a mut FlatBufferBuilder<'static>) -> &'a [u8] {
+        builder.reset();
+        // Serialize orderbook to FlatBuffer bytes
+        builder.finished_data()
+    }
+}
+```
+
+On the client, receive binary frames with `BinaryFrameParser`:
+
+```ts
+import { WebSocketPipeline, BinaryFrameParser } from 'org-asm';
+
+const parser = new BinaryFrameParser(engine)
+  .onFrame(() => store.getState().update(engine.best_bid));
+
+const ws = new WebSocketPipeline({
+  url: 'ws://localhost:9001/ws',
+  binaryType: 'arraybuffer',
+});
+ws.onBinaryMessage((data) => parser.ingestFrame(data));
+ws.connect();
+```
+
+See `guides/server-engine-pattern.md` for the full architecture walkthrough.
+
+### 6. Handle User Input
 
 ```ts
 import { InputController } from 'org-asm';
@@ -259,6 +314,7 @@ Creates type-safe offset maps from schema definitions. Validates no offset colli
 | `IZeroCopyEngine` | Zero-alloc tick: `tick()` + `frame_ptr()` + `frame_len()` |
 | `IZeroCopyDataSource` | Zero-copy data access via pointers into WASM linear memory |
 | `IWasmIngestEngine` | WASM-side message parsing via `ingest_message()` |
+| `IWasmBinaryIngestEngine` | Binary frame ingestion via `ingest_frame()` for server engine pipeline |
 
 ### View
 
@@ -310,9 +366,29 @@ Auto-reconnecting WebSocket with decoupled message handling.
 
 Delegates raw WebSocket strings to the Rust engine's `ingest_message()` — all parsing happens in WASM. Zero JS object allocation, one boundary crossing per message.
 
+#### `BinaryFrameParser`
+
+Feeds binary FlatBuffer frames from a server engine to a WASM client engine via `ingest_frame()`. Wire into `WebSocketPipeline.onBinaryMessage()`.
+
 #### `InputController`
 
 Maps DOM events to engine actions with start/end lifecycle.
+
+### Server (Rust templates)
+
+#### `ServerEngine` trait
+
+Server-side engine that ingests exchange data and serializes state to FlatBuffer bytes for broadcast. See `server/engine-trait.rs`.
+
+| Method | Description |
+|--------|-------------|
+| `ingest(&mut self, msg: &[u8]) -> bool` | Process raw exchange message, return true if state changed |
+| `tick(&mut self, builder: &mut FlatBufferBuilder) -> &[u8]` | Serialize state to FlatBuffer bytes |
+| `snapshot(&self, builder: &mut FlatBufferBuilder) -> Option<Vec<u8>>` | Optional full state for late-joining clients |
+
+#### `BroadcastState`
+
+Fan-out binary frames to all WebSocket clients via `tokio::sync::broadcast`. Serialize once, all clients share the same `Arc<Vec<u8>>`.
 
 ### Model (Store)
 
@@ -399,6 +475,8 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 
 - [x] Generic frame type support (FlatBuffers, Float64Array, or custom)
 - [x] FlatBuffers integration with `flatc` codegen
+- [x] Server engine support (Rust/Axum with FlatBuffer broadcast)
+- [x] Binary WebSocket pipeline (`BinaryFrameParser` + `onBinaryMessage`)
 - [ ] CLI scaffolding tool (`npx org-asm init`)
 - [ ] Example apps (sensor dashboard, audio visualizer)
 - [ ] Worker thread support for off-main-thread computation

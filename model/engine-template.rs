@@ -533,6 +533,25 @@ fn compute_color(value: f64) -> (u8, u8, u8) {
 //     }
 // }
 
+// --- Binary frame ingestion (server engine pipeline) ---
+//
+// When using a server engine that broadcasts FlatBuffer frames over binary
+// WebSocket, the client WASM engine receives pre-serialized bytes and
+// deserializes them to update its state. Use BinaryFrameParser from the
+// framework to wire this into WebSocketPipeline.
+//
+// #[wasm_bindgen]
+// pub fn ingest_frame(&mut self, bytes: &[u8]) {
+//     use flatbuffers;
+//     let frame = flatbuffers::root::<OrderbookFrame>(bytes).unwrap();
+//     self.best_bid = frame.best_bid();
+//     self.best_ask = frame.best_ask();
+//     self.mid_price = frame.mid_price();
+//     self.spread = frame.spread();
+//     // ... update other fields from the FlatBuffer frame ...
+//     self.data_version += 1;
+// }
+
 // --- FlatBuffers alternative ---
 //
 // Instead of returning Vec<f64> with numeric offsets, use FlatBuffers for

@@ -233,3 +233,24 @@ export interface IZeroCopyDataSource {
 export interface IWasmIngestEngine {
   ingest_message(raw: string, nowMs: number): number;
 }
+
+/**
+ * IWasmBinaryIngestEngine — Engine that receives pre-serialized binary frames.
+ *
+ * Used on the client side to receive FlatBuffer frames from a server engine
+ * over binary WebSocket. The server serializes once; the client deserializes
+ * and updates its state. No JSON parsing, no field extraction — just raw bytes.
+ *
+ * Pair with `BinaryFrameParser` from the controller to wire into WebSocketPipeline.
+ *
+ * Implementation in Rust:
+ *   #[wasm_bindgen]
+ *   pub fn ingest_frame(&mut self, bytes: &[u8]) {
+ *       let frame = flatbuffers::root::<OrderbookFrame>(bytes).unwrap();
+ *       self.best_bid = frame.best_bid();
+ *       self.data_version += 1;
+ *   }
+ */
+export interface IWasmBinaryIngestEngine {
+  ingest_frame(bytes: Uint8Array): void;
+}

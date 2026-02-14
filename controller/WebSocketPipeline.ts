@@ -19,9 +19,12 @@ export interface WebSocketConfig {
   maxReconnectAttempts?: number;
   /** Protocols to pass to WebSocket constructor */
   protocols?: string[];
+  /** Binary type for the WebSocket (default: 'blob'). Set to 'arraybuffer' for binary frame pipelines. */
+  binaryType?: BinaryType;
 }
 
 export type MessageHandler = (data: string) => void;
+export type BinaryMessageHandler = (data: ArrayBuffer) => void;
 export type ConnectionHandler = () => void;
 
 export class WebSocketPipeline {
@@ -31,6 +34,7 @@ export class WebSocketPipeline {
   private reconnectAttempts = 0;
   private intentionallyClosed = false;
   private messageHandler: MessageHandler | null = null;
+  private binaryMessageHandler: BinaryMessageHandler | null = null;
   private connectHandler: ConnectionHandler | null = null;
   private disconnectHandler: ConnectionHandler | null = null;
 
@@ -40,12 +44,19 @@ export class WebSocketPipeline {
       reconnectDelayMs: config.reconnectDelayMs ?? 3000,
       maxReconnectAttempts: config.maxReconnectAttempts ?? Infinity,
       protocols: config.protocols ?? [],
+      binaryType: config.binaryType ?? 'blob',
     };
   }
 
-  /** Set the handler for incoming messages */
+  /** Set the handler for incoming text messages */
   onMessage(handler: MessageHandler): this {
     this.messageHandler = handler;
+    return this;
+  }
+
+  /** Set the handler for incoming binary messages (ArrayBuffer) */
+  onBinaryMessage(handler: BinaryMessageHandler): this {
+    this.binaryMessageHandler = handler;
     return this;
   }
 
@@ -93,8 +104,23 @@ export class WebSocketPipeline {
     this.config.url = url;
   }
 
+  /** Send a text message to the server */
+  send(data: string): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(data);
+    }
+  }
+
+  /** Send binary data to the server */
+  sendBinary(data: ArrayBuffer | Uint8Array): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(data);
+    }
+  }
+
   private createConnection(): void {
     const ws = new WebSocket(this.config.url, this.config.protocols);
+    ws.binaryType = this.config.binaryType;
     this.ws = ws;
 
     ws.onopen = () => {
@@ -103,7 +129,11 @@ export class WebSocketPipeline {
     };
 
     ws.onmessage = (event) => {
-      this.messageHandler?.(event.data as string);
+      if (event.data instanceof ArrayBuffer) {
+        this.binaryMessageHandler?.(event.data);
+      } else {
+        this.messageHandler?.(event.data as string);
+      }
     };
 
     ws.onclose = () => {

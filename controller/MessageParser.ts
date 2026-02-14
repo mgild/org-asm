@@ -12,7 +12,7 @@
 
 import type { DataResult } from '../core/types';
 import { INGEST_DATA_UPDATED, INGEST_STATS_UPDATED } from '../core/types';
-import type { IWasmIngestEngine } from '../core/interfaces';
+import type { IWasmIngestEngine, IWasmBinaryIngestEngine } from '../core/interfaces';
 
 export interface EngineDataTarget {
   addDataPoint(value: number, timestamp: number, nowMs: number): void;
@@ -84,5 +84,40 @@ export class WasmIngestParser extends MessageParser {
       for (const cb of this.tickerCallbacks) cb();
     }
     return { dataUpdated, statsUpdated };
+  }
+}
+
+/**
+ * BinaryFrameParser — Feeds binary FlatBuffer frames to a WASM engine.
+ *
+ * Used with the server engine pipeline: the server broadcasts serialized
+ * FlatBuffer bytes over binary WebSocket, and this parser hands them
+ * directly to the client WASM engine's `ingest_frame()` method.
+ *
+ * No parsing, no allocation — just pass the bytes through.
+ *
+ * Usage:
+ *   const parser = new BinaryFrameParser(engine)
+ *     .onFrame(() => emitState(engine));
+ *   ws.onBinaryMessage((data) => parser.ingestFrame(data));
+ */
+export class BinaryFrameParser {
+  private target: IWasmBinaryIngestEngine;
+  private frameCallbacks: Array<() => void> = [];
+
+  constructor(target: IWasmBinaryIngestEngine) {
+    this.target = target;
+  }
+
+  /** Register a callback fired after each frame is ingested. */
+  onFrame(cb: () => void): this {
+    this.frameCallbacks.push(cb);
+    return this;
+  }
+
+  /** Ingest a binary FlatBuffer frame from the server. */
+  ingestFrame(data: ArrayBuffer): void {
+    this.target.ingest_frame(new Uint8Array(data));
+    for (const cb of this.frameCallbacks) cb();
   }
 }
