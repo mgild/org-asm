@@ -1,0 +1,19 @@
+// Example FlatBuffers schema for orgASM frame output.
+//
+// This schema matches the fields in model/engine-template.rs.
+// Generate code for both sides:
+//   flatc --rust -o src/generated/ schema/frame.fbs
+//   flatc --ts  -o src/generated/ schema/frame.fbs
+
+namespace OrgAsm;
+
+table Frame {
+  value_a: double = 0.0;
+  value_b: double = 0.0;
+  state_flag: bool = false;
+  color_r: ubyte = 0;
+  color_g: ubyte = 0;
+  color_b: ubyte = 0;
+}
+
+root_type Frame;
