@@ -85,26 +85,29 @@ export class BatchedPathRenderer {
  * Factory to create an IFrameConsumer that delegates canvas rendering
  * to a callback using a BatchedPathRenderer.
  *
+ * Generic over frame type F: the callback receives the frame as-is.
+ * Defaults to Float64Array for backward compatibility.
+ *
  * Useful when you want to integrate batched rendering into the
  * AnimationLoop consumer pipeline without subclassing.
  *
  * Usage:
  *   const renderer = new BatchedPathRenderer();
- *   const consumer = createBatchedRenderConsumer(renderer, 5, (frame, batch) => {
+ *   const consumer = createBatchedRenderConsumer<MyFrame>(renderer, 5, (frame, batch) => {
  *     batch.begin();
  *     // ... add segments from frame data ...
  *     batch.flush(ctx, lineWidth);
  *   });
  *   animationLoop.addConsumer(consumer);
  */
-export function createBatchedRenderConsumer(
+export function createBatchedRenderConsumer<F = Float64Array>(
   renderer: BatchedPathRenderer,
   priority: number,
-  onFrame: (frame: Float64Array, batch: BatchedPathRenderer, nowMs: number) => void,
-): IFrameConsumer {
+  onFrame: (frame: F, batch: BatchedPathRenderer, nowMs: number) => void,
+): IFrameConsumer<F> {
   return {
     priority,
-    onFrame(frame: Float64Array, nowMs: number): void {
+    onFrame(frame: F, nowMs: number): void {
       onFrame(frame, renderer, nowMs);
     },
   };

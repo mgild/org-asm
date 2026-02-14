@@ -7,28 +7,34 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./index.ts",
+      "import": "./dist/index.js",
+      "default": "./index.ts"
     },
     "./core": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js"
+      "types": "./core/index.ts",
+      "import": "./dist/core/index.js",
+      "default": "./core/index.ts"
     },
     "./model": {
-      "types": "./dist/model/index.d.ts",
-      "import": "./dist/model/index.js"
+      "types": "./model/index.ts",
+      "import": "./dist/model/index.js",
+      "default": "./model/index.ts"
     },
     "./view": {
-      "types": "./dist/view/index.d.ts",
-      "import": "./dist/view/index.js"
+      "types": "./view/index.ts",
+      "import": "./dist/view/index.js",
+      "default": "./view/index.ts"
     },
     "./controller": {
-      "types": "./dist/controller/index.d.ts",
-      "import": "./dist/controller/index.js"
+      "types": "./controller/index.ts",
+      "import": "./dist/controller/index.js",
+      "default": "./controller/index.ts"
     }
   },
   "files": [
     "dist",
+    "schema",
     "model/engine-template.rs",
     "model/Cargo.template.toml",
     "guides"
@@ -51,11 +57,15 @@
     "mvc"
   ],
   "license": "MIT",
+  "dependencies": {
+    "flatbuffers": "^24.0.0"
+  },
   "peerDependencies": {
     "zustand": ">=4.0.0",
     "rxjs": ">=7.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "zustand": "^5.0.0",
     "rxjs": "^7.8.0"

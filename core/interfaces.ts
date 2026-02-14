@@ -3,22 +3,28 @@ import type {
   FrameBufferSchema,
   CSSEffect,
   DataResult,
+  FieldExtractor,
+  BoolExtractor,
 } from './types';
 
 /**
- * IEngine — The Model contract.
+ * IEngine<F> — The Model contract.
  *
  * WASM engine that owns all state and computation. The engine is the single
  * source of truth: no JS-side state duplication. One tick() call per animation
- * frame returns a flat Float64Array containing everything the View needs to
+ * frame returns a frame of type F containing everything the View needs to
  * render the current state.
  *
+ * F can be any frame representation: Float64Array, a FlatBuffer table,
+ * a plain object, etc. The choice of F determines how consumers read values
+ * (via extractors or direct property access).
+ *
  * Implementors: Rust structs compiled to WASM that expose these methods
- * via wasm-bindgen. The flat f64 return avoids serde overhead on every frame.
+ * via wasm-bindgen.
  */
-export interface IEngine {
-  /** Compute a full animation frame. Returns flat f64 array. */
-  tick(nowMs: number): Float64Array;
+export interface IEngine<F = Float64Array> {
+  /** Compute a full animation frame. Returns frame of type F. */
+  tick(nowMs: number): F;
 
   /** Get current time-series data for chart rendering */
   getTimeSeriesData(): TimeSeriesData;
@@ -43,45 +49,45 @@ export interface IEngine {
 }
 
 /**
- * IAnimationLoop — Orchestrates the render cycle.
+ * IAnimationLoop<F> — Orchestrates the render cycle.
  *
- * Each frame: calls engine.tick(), then distributes the resulting Float64Array
+ * Each frame: calls engine.tick(), then distributes the resulting frame
  * to all registered consumers in priority order. Consumers do their own
  * interpretation (DOM mutations, canvas draws, store updates).
  */
-export interface IAnimationLoop {
+export interface IAnimationLoop<F = Float64Array> {
   start(): void;
   stop(): void;
   readonly running: boolean;
 
   /** Register a frame consumer */
-  addConsumer(consumer: IFrameConsumer): void;
-  removeConsumer(consumer: IFrameConsumer): void;
+  addConsumer(consumer: IFrameConsumer<F>): void;
+  removeConsumer(consumer: IFrameConsumer<F>): void;
 }
 
 /**
- * IFrameConsumer — Receives frame data each animation tick.
+ * IFrameConsumer<F> — Receives frame data each animation tick.
  *
  * Implement this for each piece of the View that needs per-frame updates.
  * Keep onFrame() fast: no allocations, no DOM reads, minimal branching.
  * Heavy work should be done in the WASM engine, not here.
  */
-export interface IFrameConsumer {
+export interface IFrameConsumer<F = Float64Array> {
   /** Process a new frame. Called at 60fps. Must be fast. */
-  onFrame(frame: Float64Array, nowMs: number): void;
+  onFrame(frame: F, nowMs: number): void;
 
   /** Priority for ordering (lower = earlier). Default 0. */
   readonly priority: number;
 }
 
 /**
- * IChartRenderer — Specialized frame consumer for chart libraries.
+ * IChartRenderer<F> — Specialized frame consumer for chart libraries.
  *
  * Wraps chart libraries (uPlot, lightweight-charts, etc.) behind a stable
  * contract. The animation loop feeds it frame data; it decides when to
  * actually repaint the chart (typically on data version changes, not every frame).
  */
-export interface IChartRenderer extends IFrameConsumer {
+export interface IChartRenderer<F = Float64Array> extends IFrameConsumer<F> {
   /** Set chart data. Only called when data version changes. */
   setData(data: TimeSeriesData): void;
 
@@ -96,14 +102,14 @@ export interface IChartRenderer extends IFrameConsumer {
 }
 
 /**
- * IEffectApplicator — Applies frame values to DOM elements.
+ * IEffectApplicator<F> — Applies frame values to DOM elements.
  *
- * Maps frame buffer offsets to CSS properties and style mutations.
+ * Maps frame extractors to CSS properties and style mutations.
  * Bind DOM elements by name, then each frame the applicator reads
- * the relevant offsets and writes CSS properties / inline styles.
+ * the relevant values via extractors and writes CSS properties / inline styles.
  * This is the "thin rendering layer" — no logic, just value application.
  */
-export interface IEffectApplicator extends IFrameConsumer {
+export interface IEffectApplicator<F = Float64Array> extends IFrameConsumer<F> {
   /** Bind a DOM element for effect application */
   bind(name: string, element: HTMLElement): void;
 
@@ -111,7 +117,7 @@ export interface IEffectApplicator extends IFrameConsumer {
   unbind(name: string): void;
 
   /** Get computed CSS effects from current frame */
-  getCSSEffects(frame: Float64Array): CSSEffect[];
+  getCSSEffects(frame: F): CSSEffect[];
 }
 
 /**

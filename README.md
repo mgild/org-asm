@@ -14,7 +14,7 @@ Real-time web apps — data visualization, simulations, live dashboards, trading
 
 orgASM provides a complete MVC architecture for real-time WASM+React applications:
 
-- **Model** (Rust/WASM): Owns all state and computation. Returns a flat `Float64Array` frame buffer per tick — one WASM call per frame instead of N getter calls.
+- **Model** (Rust/WASM): Owns all state and computation. Returns a frame per tick — the frame type is generic (`Float64Array`, FlatBuffers, or any representation). One WASM call per frame instead of N getter calls.
 - **View** (TypeScript): Applies frame data to DOM, canvas, and charts. Priority-ordered consumers handle data sync, visual effects, and React state updates at different rates.
 - **Controller** (TypeScript): Routes external data (WebSocket) and user input to the Model. Handles connection lifecycle and message parsing.
 
@@ -26,7 +26,7 @@ At 60fps with 39 frame fields, the flat buffer protocol makes **60 boundary cros
 ┌──────────────────────────────────────┐
 │          MODEL (Rust WASM)           │
 │  Engine struct owns ALL state        │
-│  tick(now_ms) → Float64Array         │
+│  tick(now_ms) → F (generic frame)    │
 │  One WASM call per frame             │
 └──────────────────┬───────────────────┘
                    │ Float64Array
@@ -106,21 +106,61 @@ Build:
 wasm-pack build crates/my-engine --target web --release
 ```
 
-### 2. Mirror Offsets in TypeScript
+### 2. Choose Your Frame Format
+
+#### Option A: FlatBuffers (recommended for new projects)
+
+Define a `.fbs` schema — the single source of truth for both Rust and TypeScript:
+
+```fbs
+// schema/frame.fbs
+namespace MyApp;
+
+table Frame {
+  intensity: double = 0.0;
+  is_active: bool = false;
+  color_r: ubyte = 0;
+  color_g: ubyte = 0;
+  color_b: ubyte = 0;
+}
+
+root_type Frame;
+```
+
+Generate code for both sides:
+
+```bash
+flatc --rust -o crates/my-engine/src/generated/ schema/frame.fbs
+flatc --ts  -o src/generated/ schema/frame.fbs
+```
+
+No custom codegen tool needed — `flatc` handles everything.
+
+#### Option B: Float64Array (simpler, still fully supported)
+
+Annotate your Rust `F_*` constants with type hints in trailing comments:
+
+```rust
+const F_INTENSITY: usize = 0;  // f64 - Smoothed value
+const F_IS_ACTIVE: usize = 1;  // bool - Active flag
+const F_COLOR_R: usize = 2;    // u8 - Red channel
+const FRAME_SIZE: usize = 3;
+```
+
+Create your TypeScript schema manually or with a codegen tool:
 
 ```ts
 import { FrameBufferFactory } from 'org-asm';
 
-const schema = FrameBufferFactory.createSchema([
+export const schema = FrameBufferFactory.createSchema([
   { name: 'INTENSITY', offset: 0, type: 'f64' },
   { name: 'IS_ACTIVE', offset: 1, type: 'bool' },
   { name: 'COLOR_R', offset: 2, type: 'u8' },
-  { name: 'COLOR_G', offset: 3, type: 'u8' },
-  { name: 'COLOR_B', offset: 4, type: 'u8' },
 ]);
-export const F = FrameBufferFactory.createOffsets<
-  'INTENSITY' | 'IS_ACTIVE' | 'COLOR_R' | 'COLOR_G' | 'COLOR_B'
->(schema);
+
+export const F = FrameBufferFactory.createOffsets<'INTENSITY' | 'IS_ACTIVE' | 'COLOR_R'>(schema);
+
+export const FRAME_SIZE = 3;
 ```
 
 ### 3. Wire the Animation Loop
@@ -131,49 +171,44 @@ import {
   EffectApplicator,
   ChartDataConsumer,
   ThrottledStateSync,
-  zeroCopyTickAdapter,
+  flatBufferTickAdapter,  // FlatBuffers path
+  zeroCopyTickAdapter,    // Float64Array path
 } from 'org-asm';
 import init, { Engine } from '../pkg/my_engine';
+import { Frame } from './generated/frame';
+import { ByteBuffer } from 'flatbuffers';
 
 const wasm = await init();
 const engine = new Engine();
 
-// Zero-copy tick: reads frame directly from WASM memory
-const tickSource = zeroCopyTickAdapter(engine, wasm.memory, FRAME_SIZE);
+// --- FlatBuffers path (recommended) ---
+const tickSource = flatBufferTickAdapter(engine, wasm.memory,
+  bytes => Frame.getRootAsFrame(new ByteBuffer(bytes)));
 const loop = new AnimationLoop(tickSource);
 
-// Declarative DOM effects
 const effects = new EffectApplicator();
 effects
-  .bindCSSProperty('root', '--glow-alpha', F.INTENSITY)
-  .bindTransform('container', F.INTENSITY, (v) => {
+  .bindCSSProperty('root', '--glow-alpha', f => f.intensity())
+  .bindTransform('container', f => f.intensity(), (v) => {
     const x = (Math.random() - 0.5) * 2 * v;
     const y = (Math.random() - 0.5) * 2 * v;
     return `translate(${x}px, ${y}px)`;
   });
 effects.bind('root', document.getElementById('app')!);
 
-// Version-gated chart sync
-const chartSync = new ChartDataConsumer(engine, F.WINDOW_SECONDS);
-chartSync.setSink({
-  setData: (timestamps, values) => chart.setData([timestamps, values]),
-  setTimeWindow: (min, max) => chart.setScale('x', { min, max }),
-});
-
-// Throttled React state bridge (100ms = ~10fps)
 const stateSync = new ThrottledStateSync(100);
 stateSync
-  .setActiveFlag(F.IS_ACTIVE)
+  .setActiveFlag(f => f.isActive())
   .addMapping(
     (intensity) => store.getState().update(intensity),
-    F.INTENSITY,
+    f => f.intensity(),
   );
 
-// Start — consumers run in priority order
-loop.addConsumer(chartSync);   // priority 0: data first
-loop.addConsumer(effects);     // priority 10: DOM effects
-loop.addConsumer(stateSync);   // priority 20: React last
-loop.start();
+// --- Float64Array alternative ---
+// const tickSource = zeroCopyTickAdapter(engine, wasm.memory, FRAME_SIZE);
+// const loop = new AnimationLoop(tickSource);
+// effects.bindCSSProperty('root', '--glow-alpha', f => f[F.INTENSITY]);
+// stateSync.setActiveFlag(f => f[F.IS_ACTIVE] > 0.5);
 ```
 
 ### 4. Connect a Data Source
@@ -261,10 +296,10 @@ Declarative frame-to-DOM bindings. Bind once at setup, applied every frame.
 | Method | Description |
 |--------|-------------|
 | `bind(name, element)` | Register a DOM element by name |
-| `bindCSSProperty(name, prop, offset, format?)` | `el.style.setProperty('--prop', value)` |
-| `bindStyle(name, prop, offset, format?)` | `el.style[prop] = value` |
-| `bindTransform(name, offset, compute, threshold?)` | `el.style.transform = compute(value)` |
-| `bindConditional(flagOffset, onTrue, onFalse?)` | Switch bindings based on boolean flag |
+| `bindCSSProperty(name, prop, extract, format?)` | `el.style.setProperty('--prop', extract(frame))` |
+| `bindStyle(name, prop, extract, format?)` | `el.style[prop] = extract(frame)` |
+| `bindTransform(name, extract, compute, threshold?)` | `el.style.transform = compute(extract(frame))` |
+| `bindConditional(flagExtract, onTrue, onFalse?)` | Switch bindings based on boolean extractor |
 
 #### `ChartDataConsumer` (priority: 0)
 
@@ -280,9 +315,9 @@ Bridges 60fps frame data to React at configurable intervals.
 
 | Method | Description |
 |--------|-------------|
-| `setActiveFlag(offset)` | Gate throttled updates on a boolean flag |
-| `addMapping(handler, ...offsets)` | Throttled: fires at most once per interval |
-| `addConditionalMapping(flagOffset, handler)` | Immediate: fires every frame the flag is true |
+| `setActiveFlag(extract)` | Gate throttled updates on a boolean extractor |
+| `addMapping(handler, ...extractors)` | Throttled: fires at most once per interval |
+| `addConditionalMapping(flagExtract, handler)` | Immediate: fires every frame the flag is true |
 
 ### Controller
 
@@ -315,6 +350,20 @@ Zustand store with `subscribeWithSelector` middleware for fine-grained re-render
 #### `createModuleState<T>(initial)`
 
 Module-level mutable state for 60fps data that bypasses React entirely.
+
+## Frame Access Patterns
+
+### Extractor functions (generic, works with any frame type)
+```ts
+effects.bindCSSProperty('root', '--value', f => f.intensity());
+stateSync.addMapping(handler, f => f.score(), f => f.elapsed());
+```
+
+### Float64Array offsets (backward compatible)
+```ts
+effects.bindCSSProperty('root', '--value', f => f[F.INTENSITY]);
+stateSync.addMapping(handler, f => f[F.SCORE], f => f[F.ELAPSED]);
+```
 
 ## Frame Buffer Conventions
 
@@ -351,6 +400,7 @@ If a frame budget is exceeded, higher-priority consumers still receive their dat
 
 | Dependency | Purpose |
 |------------|---------|
+| `flatbuffers` | FlatBuffers runtime for typed frame deserialization |
 | `zustand` (peer) | React state management with selector subscriptions |
 | `rxjs` (peer) | Throttled streams for high-frequency data bridging |
 | `wasm-bindgen` (Rust) | Rust-JS boundary bindings |
@@ -368,6 +418,8 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 
 ## Roadmap
 
+- [x] Generic frame type support (FlatBuffers, Float64Array, or custom)
+- [x] FlatBuffers integration with `flatc` codegen
 - [ ] CLI scaffolding tool (`npx org-asm init`)
 - [ ] Example apps (sensor dashboard, audio visualizer)
 - [ ] Worker thread support for off-main-thread computation

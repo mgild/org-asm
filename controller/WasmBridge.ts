@@ -114,6 +114,41 @@ export function zeroCopyTickAdapter(
 }
 
 /**
+ * Create a tick adapter that reads a FlatBuffer frame from WASM linear memory.
+ *
+ * The engine's tick() writes a FlatBuffer into its internal buffer.
+ * This adapter creates a Uint8Array view of the raw bytes, then calls
+ * rootFn to deserialize the FlatBuffer table — giving you a typed frame
+ * object with accessor methods (e.g., frame.intensity(), frame.colorR()).
+ *
+ * Plugs directly into AnimationLoop<F> which expects { tick(nowMs): F }.
+ *
+ * Usage:
+ *   import { Frame } from './generated/frame';
+ *   import { ByteBuffer } from 'flatbuffers';
+ *
+ *   const tick = flatBufferTickAdapter(
+ *     engine, wasm.memory,
+ *     bytes => Frame.getRootAsFrame(new ByteBuffer(bytes)),
+ *   );
+ *   const loop = new AnimationLoop(tick);
+ *   effects.bindCSSProperty('root', '--glow', f => f.valueA());
+ */
+export function flatBufferTickAdapter<F>(
+  engine: { tick(nowMs: number): void; frame_ptr(): number; frame_len(): number },
+  memory: WebAssembly.Memory,
+  rootFn: (bytes: Uint8Array) => F,
+): { tick(nowMs: number): F } {
+  return {
+    tick(nowMs: number): F {
+      engine.tick(nowMs);
+      const bytes = new Uint8Array(memory.buffer, engine.frame_ptr(), engine.frame_len());
+      return rootFn(bytes);
+    },
+  };
+}
+
+/**
  * Create a lazy Float64Array view factory for WASM linear memory.
  *
  * Returns a function that creates a fresh zero-copy view on each call.

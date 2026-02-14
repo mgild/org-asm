@@ -16,8 +16,11 @@
  * lifecycle (start/stop) and the consumer registry. It does NOT own the engine
  * or any consumer — those are injected and managed externally.
  *
+ * Generic over frame type F: the engine returns F from tick(), and all consumers
+ * receive F. Defaults to Float64Array for backward compatibility.
+ *
  * Performance notes:
- * - The loop does zero allocations per frame (the Float64Array comes from WASM).
+ * - The loop does zero allocations per frame (the frame comes from the engine).
  * - Consumer iteration is a simple for-loop over a sorted array.
  * - Date.now() is used instead of performance.now() because WASM engines
  *   typically work in epoch milliseconds for timestamp correlation.
@@ -25,24 +28,24 @@
 
 import type { IFrameConsumer } from '../core/interfaces';
 
-export class AnimationLoop {
+export class AnimationLoop<F = Float64Array> {
   private _running = false;
   private frameId: number | null = null;
-  private consumers: IFrameConsumer[] = [];
-  private engine: { tick(nowMs: number): Float64Array };
+  private consumers: IFrameConsumer<F>[] = [];
+  private engine: { tick(nowMs: number): F };
 
-  constructor(engine: { tick(nowMs: number): Float64Array }) {
+  constructor(engine: { tick(nowMs: number): F }) {
     this.engine = engine;
   }
 
   /** Register a frame consumer. Consumers are sorted by priority (lower first). */
-  addConsumer(consumer: IFrameConsumer): void {
+  addConsumer(consumer: IFrameConsumer<F>): void {
     this.consumers.push(consumer);
     this.consumers.sort((a, b) => a.priority - b.priority);
   }
 
   /** Remove a frame consumer. */
-  removeConsumer(consumer: IFrameConsumer): void {
+  removeConsumer(consumer: IFrameConsumer<F>): void {
     const idx = this.consumers.indexOf(consumer);
     if (idx >= 0) this.consumers.splice(idx, 1);
   }

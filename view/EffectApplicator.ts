@@ -3,29 +3,32 @@
  *
  * The WASM engine computes all CSS-relevant values (vignette alpha, border glow
  * intensity, shake magnitude, color interpolation, etc.) inside tick(). This class
- * is the "last mile" — it reads those precomputed values from the frame buffer
+ * is the "last mile" — it reads those precomputed values from the frame
  * and writes them to the DOM.
  *
  * The pattern: declarative bindings, imperative application.
  *
  * At setup time, you declare bindings: "element 'root', CSS property '--vignette-alpha',
- * read from frame offset 5". At runtime (60fps), the applicator walks the binding list
- * and applies values. No conditionals, no computation — just read and write.
+ * extract from frame via extractor function". At runtime (60fps), the applicator walks
+ * the binding list and applies values. No conditionals, no computation — just read and write.
  *
  * Why OOP here: Different apps have different DOM structures, but the PATTERN is
- * always the same — read frame[offset], write to element.style. The class provides
+ * always the same — extract value from frame, write to element.style. The class provides
  * a fluent builder API for declaring bindings and handles all the DOM write mechanics.
+ *
+ * Generic over frame type F: extractors are functions (frame: F) => number (or boolean
+ * for conditionals). Defaults to Float64Array for backward compatibility.
  *
  * Binding types:
  * - CSSProperty: Sets a CSS custom property (e.g., --vignette-alpha) via setProperty()
  * - Style: Sets an inline style property (e.g., opacity) via direct assignment
- * - Transform: Computes a transform string from a frame value (e.g., shake → translate)
- * - Conditional: Switches between binding sets based on a boolean frame flag
+ * - Transform: Computes a transform string from a frame value (e.g., shake -> translate)
+ * - Conditional: Switches between binding sets based on a boolean extractor
  *
  * Usage:
- *   const effects = new EffectApplicator();
- *   effects.bindCSSProperty('root', '--vignette-alpha', F.VIG_ALPHA);
- *   effects.bindTransform('chart', F.SHAKE_INTENSITY, (v) => {
+ *   const effects = new EffectApplicator<MyFrame>();
+ *   effects.bindCSSProperty('root', '--vignette-alpha', f => f.vigAlpha);
+ *   effects.bindTransform('chart', f => f.shakeIntensity, (v) => {
  *     const sx = (Math.random() - 0.5) * 2 * v;
  *     const sy = (Math.random() - 0.5) * 2 * v;
  *     return `translate(${sx}px, ${sy}px)`;
@@ -35,53 +38,53 @@
  */
 
 import type { IFrameConsumer } from '../core/interfaces';
-import type { CSSEffect } from '../core/types';
+import type { CSSEffect, FieldExtractor, BoolExtractor } from '../core/types';
 
 /** A binding that sets a CSS custom property via element.style.setProperty() */
-interface CSSPropertyBinding {
+interface CSSPropertyBinding<F> {
   type: 'css';
   elementName: string;
   property: string;
-  offset: number;
+  extract: FieldExtractor<F>;
   format?: (value: number) => string;
 }
 
 /** A binding that sets an inline style property via direct assignment */
-interface StylePropertyBinding {
+interface StylePropertyBinding<F> {
   type: 'style';
   elementName: string;
   property: string;
-  offset: number;
+  extract: FieldExtractor<F>;
   format?: (value: number) => string;
 }
 
 /** A binding that computes a CSS transform from a frame value */
-interface TransformBinding {
+interface TransformBinding<F> {
   type: 'transform';
   elementName: string;
-  offset: number;
+  extract: FieldExtractor<F>;
   compute: (value: number) => string;
   threshold?: number;
 }
 
-/** A binding that switches between sub-bindings based on a boolean frame flag */
-interface ConditionalBinding {
+/** A binding that switches between sub-bindings based on a boolean extractor */
+interface ConditionalBinding<F> {
   type: 'conditional';
-  flagOffset: number;
-  onTrue: SimpleBinding[];
-  onFalse?: SimpleBinding[];
+  flagExtract: BoolExtractor<F>;
+  onTrue: SimpleBinding<F>[];
+  onFalse?: SimpleBinding<F>[];
 }
 
 /** Any non-conditional binding (used inside ConditionalBinding) */
-type SimpleBinding = CSSPropertyBinding | StylePropertyBinding | TransformBinding;
+type SimpleBinding<F> = CSSPropertyBinding<F> | StylePropertyBinding<F> | TransformBinding<F>;
 
 /** All binding types */
-type Binding = SimpleBinding | ConditionalBinding;
+type Binding<F> = SimpleBinding<F> | ConditionalBinding<F>;
 
-export class EffectApplicator implements IFrameConsumer {
+export class EffectApplicator<F = Float64Array> implements IFrameConsumer<F> {
   readonly priority = 10;
   private elements = new Map<string, HTMLElement>();
-  private bindings: Binding[] = [];
+  private bindings: Binding<F>[] = [];
 
   /** Bind a named DOM element for effect application. */
   bind(name: string, element: HTMLElement): void {
@@ -94,29 +97,37 @@ export class EffectApplicator implements IFrameConsumer {
   }
 
   /**
-   * Bind a CSS custom property to a frame buffer offset.
+   * Bind a CSS custom property to a frame extractor.
    *
    * CSS custom properties (--foo) are set via element.style.setProperty().
    * Use the optional format function to convert the raw f64 to a CSS value
    * string (e.g., adding units or clamping). Default: String(value).
    *
+   * @param elementName - Name of the bound DOM element
+   * @param property - CSS custom property name (e.g., '--vignette-alpha')
+   * @param extract - Extractor function that reads a numeric value from the frame
+   * @param format - Optional formatter for the CSS value string
    * @returns this, for fluent chaining
    */
-  bindCSSProperty(elementName: string, property: string, offset: number, format?: (v: number) => string): this {
-    this.bindings.push({ type: 'css', elementName, property, offset, format });
+  bindCSSProperty(elementName: string, property: string, extract: FieldExtractor<F>, format?: (v: number) => string): this {
+    this.bindings.push({ type: 'css', elementName, property, extract, format });
     return this;
   }
 
   /**
-   * Bind an inline style property to a frame buffer offset.
+   * Bind an inline style property to a frame extractor.
    *
    * Inline styles (element.style.opacity, etc.) are set via direct assignment.
    * Use for standard CSS properties that don't use the custom property syntax.
    *
+   * @param elementName - Name of the bound DOM element
+   * @param property - CSS property name (e.g., 'opacity')
+   * @param extract - Extractor function that reads a numeric value from the frame
+   * @param format - Optional formatter for the CSS value string
    * @returns this, for fluent chaining
    */
-  bindStyle(elementName: string, property: string, offset: number, format?: (v: number) => string): this {
-    this.bindings.push({ type: 'style', elementName, property, offset, format });
+  bindStyle(elementName: string, property: string, extract: FieldExtractor<F>, format?: (v: number) => string): this {
+    this.bindings.push({ type: 'style', elementName, property, extract, format });
     return this;
   }
 
@@ -128,25 +139,31 @@ export class EffectApplicator implements IFrameConsumer {
    * threshold, the transform is cleared (set to empty string) to avoid
    * unnecessary compositing layers.
    *
+   * @param elementName - Name of the bound DOM element
+   * @param extract - Extractor function that reads a numeric value from the frame
+   * @param compute - Function that converts the numeric value to a CSS transform string
    * @param threshold - Only apply if value > threshold (default: 0)
    * @returns this, for fluent chaining
    */
-  bindTransform(elementName: string, offset: number, compute: (v: number) => string, threshold = 0): this {
-    this.bindings.push({ type: 'transform', elementName, offset, compute, threshold });
+  bindTransform(elementName: string, extract: FieldExtractor<F>, compute: (v: number) => string, threshold = 0): this {
+    this.bindings.push({ type: 'transform', elementName, extract, compute, threshold });
     return this;
   }
 
   /**
-   * Bind effects that switch based on a boolean flag in the frame buffer.
+   * Bind effects that switch based on a boolean extractor from the frame.
    *
-   * When frame[flagOffset] > 0.5, onTrue bindings are applied. Otherwise,
+   * When flagExtract(frame) returns true, onTrue bindings are applied. Otherwise,
    * onFalse bindings are applied (if provided). Use for states like
    * "active" vs "inactive" that require different visual treatments.
    *
+   * @param flagExtract - Extractor function that reads a boolean value from the frame
+   * @param onTrue - Bindings to apply when the flag is true
+   * @param onFalse - Bindings to apply when the flag is false (optional)
    * @returns this, for fluent chaining
    */
-  bindConditional(flagOffset: number, onTrue: SimpleBinding[], onFalse?: SimpleBinding[]): this {
-    this.bindings.push({ type: 'conditional', flagOffset, onTrue, onFalse });
+  bindConditional(flagExtract: BoolExtractor<F>, onTrue: SimpleBinding<F>[], onFalse?: SimpleBinding<F>[]): this {
+    this.bindings.push({ type: 'conditional', flagExtract, onTrue, onFalse });
     return this;
   }
 
@@ -156,7 +173,7 @@ export class EffectApplicator implements IFrameConsumer {
    * Useful for testing or for consumers that want to batch CSS writes
    * themselves rather than letting the applicator mutate the DOM directly.
    */
-  getCSSEffects(frame: Float64Array): CSSEffect[] {
+  getCSSEffects(frame: F): CSSEffect[] {
     const effects: CSSEffect[] = [];
     for (const binding of this.bindings) {
       this.collectCSSEffects(binding, frame, effects);
@@ -165,20 +182,20 @@ export class EffectApplicator implements IFrameConsumer {
   }
 
   /** Apply all bindings for a frame. Called at 60fps by the animation loop. */
-  onFrame(frame: Float64Array, _nowMs: number): void {
+  onFrame(frame: F, _nowMs: number): void {
     for (const binding of this.bindings) {
       this.applyBinding(binding, frame);
     }
   }
 
-  private applyBinding(binding: Binding, frame: Float64Array): void {
+  private applyBinding(binding: Binding<F>, frame: F): void {
     switch (binding.type) {
       case 'css': {
         const el = this.elements.get(binding.elementName);
         if (!el) return;
         const value = binding.format
-          ? binding.format(frame[binding.offset])
-          : String(frame[binding.offset]);
+          ? binding.format(binding.extract(frame))
+          : String(binding.extract(frame));
         el.style.setProperty(binding.property, value);
         break;
       }
@@ -186,15 +203,15 @@ export class EffectApplicator implements IFrameConsumer {
         const el = this.elements.get(binding.elementName);
         if (!el) return;
         const value = binding.format
-          ? binding.format(frame[binding.offset])
-          : String(frame[binding.offset]);
+          ? binding.format(binding.extract(frame))
+          : String(binding.extract(frame));
         (el.style as unknown as Record<string, string>)[binding.property] = value;
         break;
       }
       case 'transform': {
         const el = this.elements.get(binding.elementName);
         if (!el) return;
-        const v = frame[binding.offset];
+        const v = binding.extract(frame);
         if (v > (binding.threshold ?? 0)) {
           el.style.transform = binding.compute(v);
         } else {
@@ -203,7 +220,7 @@ export class EffectApplicator implements IFrameConsumer {
         break;
       }
       case 'conditional': {
-        const flag = frame[binding.flagOffset] > 0.5;
+        const flag = binding.flagExtract(frame);
         const activeBindings = flag ? binding.onTrue : (binding.onFalse ?? []);
         for (const b of activeBindings) {
           this.applyBinding(b, frame);
@@ -213,17 +230,17 @@ export class EffectApplicator implements IFrameConsumer {
     }
   }
 
-  private collectCSSEffects(binding: Binding, frame: Float64Array, effects: CSSEffect[]): void {
+  private collectCSSEffects(binding: Binding<F>, frame: F, effects: CSSEffect[]): void {
     switch (binding.type) {
       case 'css': {
         const value = binding.format
-          ? binding.format(frame[binding.offset])
-          : String(frame[binding.offset]);
+          ? binding.format(binding.extract(frame))
+          : String(binding.extract(frame));
         effects.push({ property: binding.property, value });
         break;
       }
       case 'conditional': {
-        const flag = frame[binding.flagOffset] > 0.5;
+        const flag = binding.flagExtract(frame);
         const activeBindings = flag ? binding.onTrue : (binding.onFalse ?? []);
         for (const b of activeBindings) {
           this.collectCSSEffects(b, frame, effects);

@@ -1,3 +1,3 @@
 export * from './types';
 export * from './interfaces';
-export { FrameBufferFactory } from './FrameBuffer';
+export { FrameBufferFactory, flatBufferTickAdapter } from './FrameBuffer';

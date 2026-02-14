@@ -2,10 +2,28 @@
  * Core types for the WASM Engine Framework.
  * All real-time WASM+React apps built on this framework share these contracts.
  *
- * Design principle: WASM engines return flat Float64Array buffers to minimize
- * boundary-crossing overhead. These types provide the vocabulary for describing,
- * accessing, and consuming those buffers on the JS side.
+ * Design principle: The framework is generic over frame type <F>. Consumers use
+ * extractor functions (frame: F) => number instead of magic offset numbers.
+ * This works with any frame representation: FlatBuffers, Float64Array, plain
+ * objects, DataView, etc.
+ *
+ * The Float64Array path (FrameBufferFactory + offsets) is still fully supported
+ * for backward compatibility and simplicity.
  */
+
+// ============================================
+// Generic extractor types
+// ============================================
+
+/** Extracts a numeric value from a frame of type F */
+export type FieldExtractor<F> = (frame: F) => number;
+
+/** Extracts a boolean value from a frame of type F */
+export type BoolExtractor<F> = (frame: F) => boolean;
+
+// ============================================
+// Float64Array-specific types (backward compat)
+// ============================================
 
 /** Frame buffer field descriptor — maps named fields to flat array offsets */
 export interface FrameFieldDescriptor {

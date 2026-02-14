@@ -46,23 +46,26 @@ use serde::Deserialize;
 // ============================================
 // STEP 1: Define frame buffer offsets
 //
-// These MUST match the JS F constants exactly.
-// Convention: prefix with F_ in Rust, no prefix in JS.
+// These are the single source of truth for the frame buffer contract.
+// Run `flatc --rust --ts schema/frame.fbs` (FlatBuffers) or the legacy
+// `npx org-asm generate <this-file>` codegen to produce the TypeScript schema.
 //
-// The frame buffer is the contract between Rust and JS.
-// Adding a field means updating BOTH sides. Keep them
-// in a single block so drift is easy to spot.
+// Convention: prefix with F_ in Rust. The codegen tool strips the prefix.
+// Annotate each field with a type in the trailing comment:
+//   // f64 - description   (default if omitted)
+//   // bool - description  (0.0/1.0 encoded)
+//   // u8 - description    (0-255 stored as f64)
 //
 // Rule: offsets are sequential integers starting at 0.
 // FRAME_SIZE is always the count of fields.
 // ============================================
 
-const F_VALUE_A: usize = 0;     // Primary computed value
-const F_VALUE_B: usize = 1;     // Secondary computed value
-const F_STATE_FLAG: usize = 2;  // Boolean encoded as 0.0/1.0
-const F_COLOR_R: usize = 3;     // Color component (0-255 as f64)
-const F_COLOR_G: usize = 4;
-const F_COLOR_B: usize = 5;
+const F_VALUE_A: usize = 0;     // f64 - Primary computed value
+const F_VALUE_B: usize = 1;     // f64 - Secondary computed value
+const F_STATE_FLAG: usize = 2;  // bool - Boolean encoded as 0.0/1.0
+const F_COLOR_R: usize = 3;     // u8 - Color component (0-255)
+const F_COLOR_G: usize = 4;     // u8 - Color component (0-255)
+const F_COLOR_B: usize = 5;     // u8 - Color component (0-255)
 // ... add more fields as needed
 const FRAME_SIZE: usize = 6;    // Total number of fields
 
@@ -527,3 +530,62 @@ fn compute_color(value: f64) -> (u8, u8, u8) {
 //         assert!((frame[F_VALUE_A] - 100.0).abs() < 1.0);
 //     }
 // }
+
+// --- FlatBuffers alternative ---
+//
+// Instead of returning Vec<f64> with numeric offsets, use FlatBuffers for
+// type-safe, schema-driven frame output. The `.fbs` schema is the single
+// source of truth for both Rust and TypeScript (no custom codegen needed).
+//
+// 1. Define schema: schema/frame.fbs
+// 2. Generate code: flatc --rust --ts schema/frame.fbs
+// 3. Replace Vec<f64> frame buffer with FlatBufferBuilder
+//
+// use flatbuffers::FlatBufferBuilder;
+// use crate::generated::frame_generated::*;
+//
+// pub struct Engine {
+//     // ... existing fields ...
+//     builder: FlatBufferBuilder<'static>,
+// }
+//
+// #[wasm_bindgen]
+// impl Engine {
+//     pub fn tick(&mut self, now_ms: f64) {
+//         self.builder.reset();
+//         // Compute values (same as Vec<f64> path)
+//         let smooth = self.smooth_value;
+//         let blend = self.blend_factor;
+//         let flag = self.current_value > self.prev_value;
+//         let color = compute_color(normalized);
+//
+//         let frame = Frame::create(&mut self.builder, &FrameArgs {
+//             value_a: smooth,
+//             value_b: blend,
+//             state_flag: flag,
+//             color_r: color.0,
+//             color_g: color.1,
+//             color_b: color.2,
+//         });
+//         self.builder.finish(frame, None);
+//     }
+//
+//     // JS reads the FlatBuffer bytes directly from WASM memory
+//     pub fn frame_ptr(&self) -> *const u8 {
+//         self.builder.finished_data().as_ptr()
+//     }
+//
+//     pub fn frame_len(&self) -> usize {
+//         self.builder.finished_data().len()
+//     }
+// }
+//
+// TypeScript side:
+//   import { Frame } from './generated/frame';
+//   import { ByteBuffer } from 'flatbuffers';
+//   import { flatBufferTickAdapter } from 'org-asm';
+//
+//   const tick = flatBufferTickAdapter(engine, wasm.memory,
+//     bytes => Frame.getRootAsFrame(new ByteBuffer(bytes)));
+//   const loop = new AnimationLoop(tick);
+//   effects.bindCSSProperty('root', '--glow', f => f.valueA());

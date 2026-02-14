@@ -14,15 +14,20 @@
  * wrap uPlot, lightweight-charts, or any other chart library behind a stable
  * two-method interface (setData + setTimeWindow).
  *
- * The time window is driven by a frame buffer offset (e.g., the engine computes
- * a "window seconds" value that controls how much history is visible). This keeps
- * window management inside the engine where it can coordinate with zoom/scroll state.
+ * The time window is driven by an extractor function that reads from the frame
+ * (e.g., the engine computes a "window seconds" value that controls how much
+ * history is visible). This keeps window management inside the engine where it
+ * can coordinate with zoom/scroll state.
+ *
+ * Generic over frame type F: the extractor reads the window seconds from any
+ * frame representation. Defaults to Float64Array for backward compatibility.
  *
  * Priority 0 ensures chart data is synced before effects (priority 10) or
  * React state (priority 20) — charts are the most latency-sensitive consumer.
  */
 
 import type { IFrameConsumer } from '../core/interfaces';
+import type { FieldExtractor } from '../core/types';
 
 /** Minimal chart sink contract — implement per chart library. */
 export interface ChartDataSink {
@@ -33,7 +38,7 @@ export interface ChartDataSink {
   setTimeWindow(minSec: number, maxSec: number): void;
 }
 
-export class ChartDataConsumer implements IFrameConsumer {
+export class ChartDataConsumer<F = Float64Array> implements IFrameConsumer<F> {
   readonly priority = 0;
 
   private lastVersion = 0;
@@ -45,18 +50,18 @@ export class ChartDataConsumer implements IFrameConsumer {
     get_timestamps(): Float64Array;
     get_values(): Float64Array;
   };
-  private windowSecondsOffset: number;
+  private extractWindowSeconds: FieldExtractor<F>;
 
   /**
    * @param engine - WASM engine exposing versioned time-series accessors
-   * @param windowSecondsOffset - Frame buffer offset containing the visible window duration in seconds
+   * @param extractWindowSeconds - Extractor function that reads the visible window duration (in seconds) from the frame
    */
   constructor(
     engine: { data_version(): number; get_timestamps(): Float64Array; get_values(): Float64Array },
-    windowSecondsOffset: number,
+    extractWindowSeconds: FieldExtractor<F>,
   ) {
     this.engine = engine;
-    this.windowSecondsOffset = windowSecondsOffset;
+    this.extractWindowSeconds = extractWindowSeconds;
   }
 
   /**
@@ -70,9 +75,9 @@ export class ChartDataConsumer implements IFrameConsumer {
    *
    * @param engine - WASM engine exposing ptr/len accessors for time-series data
    * @param memory - WebAssembly.Memory from the WASM init result
-   * @param windowSecondsOffset - Frame buffer offset for window duration
+   * @param extractWindowSeconds - Extractor function that reads the window duration from the frame
    */
-  static zeroCopy(
+  static zeroCopy<F = Float64Array>(
     engine: {
       data_version(): number;
       timestamps_ptr(): number;
@@ -81,14 +86,14 @@ export class ChartDataConsumer implements IFrameConsumer {
       values_len(): number;
     },
     memory: WebAssembly.Memory,
-    windowSecondsOffset: number,
-  ): ChartDataConsumer {
+    extractWindowSeconds: FieldExtractor<F>,
+  ): ChartDataConsumer<F> {
     const wrapper = {
       data_version: () => engine.data_version(),
       get_timestamps: () => new Float64Array(memory.buffer, engine.timestamps_ptr(), engine.timestamps_len()),
       get_values: () => new Float64Array(memory.buffer, engine.values_ptr(), engine.values_len()),
     };
-    return new ChartDataConsumer(wrapper, windowSecondsOffset);
+    return new ChartDataConsumer<F>(wrapper, extractWindowSeconds);
   }
 
   /** Set the chart sink that receives data updates. Can be swapped at runtime. */
@@ -103,7 +108,7 @@ export class ChartDataConsumer implements IFrameConsumer {
    * then pushes the full dataset and updates the sink's time window every frame.
    * This guarantees full-series redraws when chart scale/window changes.
    */
-  onFrame(frame: Float64Array, nowMs: number): void {
+  onFrame(frame: F, nowMs: number): void {
     if (!this.sink) return;
 
     const ver = this.engine.data_version();
@@ -118,7 +123,7 @@ export class ChartDataConsumer implements IFrameConsumer {
     this.sink.setData(this.timestamps, this.values);
 
     const nowSec = nowMs / 1000;
-    const windowSec = frame[this.windowSecondsOffset];
+    const windowSec = this.extractWindowSeconds(frame);
     this.sink.setTimeWindow(nowSec - windowSec, nowSec);
   }
 }
