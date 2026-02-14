@@ -1,22 +1,13 @@
 /**
- * MessageParser — Base class for parsing WebSocket messages.
+ * MessageParser — Abstract base class for message parsing.
  *
- * Implement one parser per data source. The parser extracts values from
- * raw JSON and calls engine methods with primitive types.
+ * Prefer WasmIngestParser for all new projects. It delegates raw strings
+ * to the Rust engine's ingest_message(), keeping all data processing in
+ * WASM: one boundary crossing, zero JS object allocation.
  *
- * Why parse in JS? Browser JSON.parse is C++ native and very fast.
- * Passing primitives to WASM (f64) is faster than passing strings
- * for WASM-side parsing. This also avoids adding serde_json to the
- * WASM binary (~100KB savings).
- *
- * Usage:
- *   class MySourceParser extends MessageParser {
- *     parse(raw, engine, nowMs) {
- *       const msg = JSON.parse(raw);
- *       engine.addDataPoint(parseFloat(msg.value), msg.timestamp, nowMs);
- *       return { dataUpdated: true, statsUpdated: false };
- *     }
- *   }
+ * This base class exists as an escape hatch for cases where WASM-side
+ * parsing isn't viable (e.g., binary protocols that need Web APIs,
+ * or prototyping before the Rust engine is ready).
  */
 
 import type { DataResult } from '../core/types';

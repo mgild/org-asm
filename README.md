@@ -183,27 +183,34 @@ loop.start();
 
 ### 4. Connect a Data Source
 
-```ts
-import { WebSocketPipeline, MessageParser } from 'org-asm';
-import type { EngineDataTarget, DataResult } from 'org-asm';
+Message parsing belongs in Rust. The engine implements `ingest_message()` with serde_json — one boundary crossing replaces many, and zero JS objects are allocated.
 
-class MyParser extends MessageParser {
-  parse(raw: string, engine: EngineDataTarget, nowMs: number): DataResult {
-    const msg = JSON.parse(raw);
-    if (msg.type === 'data') {
-      engine.addDataPoint(parseFloat(msg.value), msg.timestamp / 1000, nowMs);
-      return { dataUpdated: true, statsUpdated: false };
-    }
-    return { dataUpdated: false, statsUpdated: false };
-  }
+```rust
+// In your Rust engine:
+#[wasm_bindgen]
+pub fn ingest_message(&mut self, raw: &str, now_ms: f64) -> u32 {
+    #[derive(Deserialize)]
+    struct Msg { value: f64, timestamp: f64 }
+
+    let msg: Msg = match serde_json::from_str(raw) {
+        Ok(m) => m,
+        Err(_) => return 0,
+    };
+    self.add_data_point(msg.value, msg.timestamp, now_ms);
+    1 // INGEST_DATA_UPDATED
 }
+```
 
+```ts
+import { WebSocketPipeline, WasmIngestParser } from 'org-asm';
+
+const parser = new WasmIngestParser(engine);
 const ws = new WebSocketPipeline({ url: 'wss://your-source/ws' });
-const adapter = { addDataPoint: (v, t, n) => engine.add_data_point(v, t, n) };
-const parser = new MyParser();
-ws.onMessage((raw) => parser.parse(raw, adapter, Date.now()));
+ws.onMessage((raw) => parser.parse(raw, engine, Date.now()));
 ws.connect();
 ```
+
+The raw WebSocket string goes straight to WASM. No `JSON.parse`, no JS object allocation, no field extraction in TypeScript.
 
 ### 5. Handle User Input
 
@@ -299,9 +306,9 @@ Idempotent WASM initialization and engine factory.
 
 Auto-reconnecting WebSocket with decoupled message handling.
 
-#### `MessageParser` / `WasmIngestParser`
+#### `WasmIngestParser`
 
-Abstract base for data source parsers. `WasmIngestParser` delegates parsing to WASM for high-frequency feeds.
+Delegates raw WebSocket strings to the Rust engine's `ingest_message()` — all parsing happens in WASM. Zero JS object allocation, one boundary crossing per message.
 
 #### `InputController`
 

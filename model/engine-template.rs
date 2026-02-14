@@ -421,33 +421,35 @@ impl Engine {
         self.current_value
     }
 
-    // --- WASM-side message parsing ---
+    // --- WASM-side message parsing (recommended) ---
     //
-    // For high-frequency WebSocket feeds (50+ msg/sec), parsing JSON
-    // in WASM can be faster than JS JSON.parse because:
-    //   1. No JS object allocation (serde extracts only needed fields)
-    //   2. One boundary crossing instead of N (parse + ingest in one call)
-    //   3. No GC pressure from throwaway JS objects
+    // All data processing belongs in Rust. Raw WebSocket strings go straight
+    // to WASM where serde_json parses them — one boundary crossing, zero JS
+    // object allocation, zero GC pressure.
     //
-    // Trade-off: adds ~30KB for serde_json. Use framework's WasmIngestParser
-    // to integrate with the WebSocketPipeline.
+    // Use the framework's WasmIngestParser to wire this into WebSocketPipeline:
+    //   const parser = new WasmIngestParser(engine);
+    //   ws.onMessage((raw) => parser.parse(raw, engine, Date.now()));
     //
     // Return bitmask: bit 0 = data updated, bit 1 = stats updated.
     //
-    // Implement per data source:
-    //
-    // #[wasm_bindgen]
-    // pub fn ingest_message(&mut self, raw: &str, now_ms: f64) -> u32 {
-    //     #[derive(Deserialize)]
-    //     struct MyMsg { value: f64, timestamp: f64 }
-    //
-    //     let msg: MyMsg = match serde_json::from_str(raw) {
-    //         Ok(m) => m,
-    //         Err(_) => return 0,
-    //     };
-    //     self.add_data_point(msg.value, msg.timestamp, now_ms);
-    //     1 // data updated
-    // }
+    // Customize the Deserialize struct to match your data source:
+
+    #[wasm_bindgen]
+    pub fn ingest_message(&mut self, raw: &str, now_ms: f64) -> u32 {
+        #[derive(Deserialize)]
+        struct Msg {
+            value: f64,
+            timestamp: f64,
+        }
+
+        let msg: Msg = match serde_json::from_str(raw) {
+            Ok(m) => m,
+            Err(_) => return 0,
+        };
+        self.add_data_point(msg.value, msg.timestamp, now_ms);
+        1 // INGEST_DATA_UPDATED
+    }
 }
 
 // ============================================
