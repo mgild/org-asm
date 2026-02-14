@@ -1,0 +1,63 @@
+{
+  "name": "org-asm",
+  "version": "0.1.0",
+  "description": "Rust-first MVC for 60fps React applications. Structured real-time rendering where WASM owns the state and JS is the thin rendering layer.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./model": {
+      "types": "./dist/model/index.d.ts",
+      "import": "./dist/model/index.js"
+    },
+    "./view": {
+      "types": "./dist/view/index.d.ts",
+      "import": "./dist/view/index.js"
+    },
+    "./controller": {
+      "types": "./dist/controller/index.d.ts",
+      "import": "./dist/controller/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "model/engine-template.rs",
+    "model/Cargo.template.toml",
+    "guides"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "wasm",
+    "webassembly",
+    "rust",
+    "react",
+    "realtime",
+    "animation",
+    "60fps",
+    "frame-buffer",
+    "zero-copy",
+    "mvc"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "zustand": ">=4.0.0",
+    "rxjs": ">=7.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "zustand": "^5.0.0",
+    "rxjs": "^7.8.0"
+  }
+}

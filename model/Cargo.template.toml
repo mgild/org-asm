@@ -1,0 +1,80 @@
+# ==============================================================================
+# Template Cargo.toml for WASM Engine Crates
+# ==============================================================================
+#
+# Copy this file to your engine crate directory and customize.
+#
+# Usage:
+#   cp framework/model/Cargo.template.toml my-engine/Cargo.toml
+#   # Edit [package] name and add domain-specific dependencies
+#
+# Build:
+#   wasm-pack build --target web --release
+#
+# Output:
+#   generated/pkg/my_engine_bg.wasm  (~50KB with opt-level "z")
+#   generated/pkg/my_engine.js       (JS glue code with init() function)
+#   generated/pkg/my_engine.d.ts     (TypeScript type definitions)
+
+[package]
+name = "my-engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# cdylib: generates a .wasm file loadable by wasm-pack/wasm-bindgen.
+# rlib:   allows this crate to be used as a dependency by other Rust crates
+#         (useful for testing and multi-crate workspaces).
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Core WASM bindings. Required for #[wasm_bindgen] macros.
+wasm-bindgen = "0.2"
+
+# JavaScript interop (Date, Array, Math, etc).
+# Only needed if you call JS built-ins from Rust.
+js-sys = "0.3"
+
+# --- Optional dependencies ---
+# Uncomment as needed:
+
+# serde: Required if using WASM-side message parsing (ingest_message pattern)
+# or if exporting schema as JSON. Adds ~30KB to WASM binary.
+# Uncomment both for WasmIngestParser integration:
+# serde = { version = "1", features = ["derive"] }
+# serde_json = "1"
+#
+# If only using serde for schema export (not parsing):
+# serde = { version = "1", features = ["derive"] }
+# serde-wasm-bindgen = "0.6"
+
+# web-sys: DOM access from Rust. Rarely needed since JS handles all rendering.
+# Useful for console::log() during debugging.
+# web-sys = { version = "0.3", features = ["console"] }
+
+# getrandom: Required if you need random numbers in WASM.
+# Must enable the "js" feature for browser compatibility.
+# getrandom = { version = "0.2", features = ["js"] }
+
+[profile.release]
+# opt-level "z": Optimize for binary size over speed.
+# WASM is downloaded over the network, so smaller = faster load.
+# Typical engine binary: ~50KB with "z", ~80KB with "3" (max speed).
+# For compute-heavy engines, consider "3" instead.
+opt-level = "z"
+
+# lto = true: Link-Time Optimization across all crates.
+# Eliminates dead code and inlines across crate boundaries.
+# Increases compile time but reduces binary size by 10-30%.
+lto = true
+
+# codegen-units = 1: Use a single codegen unit for maximum optimization.
+# Default is 16 (parallel compilation). Setting to 1 allows more
+# cross-function optimization at the cost of slower builds.
+# Uncomment for production builds:
+# codegen-units = 1
+
+# strip = true: Strip debug symbols from the release binary.
+# Reduces binary size. Debug info is not useful in production WASM.
+# Uncomment for production builds:
+# strip = true
