@@ -1,0 +1,36 @@
+[package]
+name = "my-server-engine"
+version = "0.1.0"
+edition = "2021"
+
+# Rename and customize for your project.
+# Copy to your server crate root:
+#   cp node_modules/org-asm/server/Cargo.template.toml my-server/Cargo.toml
+
+[dependencies]
+# Web framework with WebSocket support
+axum = { version = "0.7", features = ["ws"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Exchange WebSocket client
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+
+# Async stream utilities (SinkExt, StreamExt)
+futures-util = "0.3"
+
+# FlatBuffers runtime — must match the version used by flatc codegen
+flatbuffers = "24.3"
+
+# JSON parsing (for exchange messages)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Structured logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[profile.release]
+opt-level = 3    # Speed over size (server binary, not browser WASM)
+lto = true       # Link-time optimization for maximum performance

@@ -1,0 +1,32 @@
+// FlatBuffers schema for orderbook data.
+//
+// Shared contract between server engine (Rust/native) and client engine (WASM).
+// Generate code for both sides:
+//   flatc --rust -o server/src/generated/ schema/orderbook.fbs
+//   flatc --ts  -o src/generated/         schema/orderbook.fbs
+//
+// PriceLevel is a struct (not table) for zero-copy inline access —
+// no vtable indirection, fixed 16 bytes per level.
+
+namespace OrgAsm.Orderbook;
+
+struct PriceLevel {
+  price: double;
+  size: double;
+}
+
+table OrderbookFrame {
+  best_bid: double;
+  best_ask: double;
+  mid_price: double;
+  spread: double;
+  bids: [PriceLevel];
+  asks: [PriceLevel];
+  timestamp_ms: uint64;
+  sequence: uint64;
+  bid_total_size: double;
+  ask_total_size: double;
+  imbalance: double;        // precomputed: (bid_total - ask_total) / (bid_total + ask_total)
+}
+
+root_type OrderbookFrame;
