@@ -1,6 +1,6 @@
 //! # Shared Crate Template
 //!
-//! Common domain types and validation shared between the server engine (native Rust)
+//! Common types, constants, and validation shared between the server engine (native Rust)
 //! and the client engine (WASM). This crate is the single source of truth for domain
 //! logic that must agree on both sides of the WebSocket boundary.
 //!
@@ -20,9 +20,9 @@
 //!
 //! ## What belongs here
 //!
-//! - Domain types (Side, PriceLevel, etc.)
-//! - Validation functions (price > 0, size > 0)
-//! - Constants shared between server and client
+//! - Domain types shared between server and client
+//! - Validation functions (input sanitization, range checks)
+//! - Constants both sides must agree on
 //! - Pure computation helpers (no I/O, no WASM bindings)
 //!
 //! ## What does NOT belong here
@@ -31,8 +31,17 @@
 //! - Server-only logic (WebSocket handling, broadcast, etc.)
 //! - FlatBuffer generated code (generated per-target from schema/*.fbs)
 //! - I/O, networking, or platform-specific code
-
-use serde::{Deserialize, Serialize};
+//!
+//! ## How to use
+//!
+//! Replace the example types below with your own domain types.
+//! Import from both crates:
+//!
+//! ```toml
+//! # In server/Cargo.toml and engine/Cargo.toml:
+//! [dependencies]
+//! my-shared = { path = "../shared" }
+//! ```
 
 // ============================================
 // Constants
@@ -42,107 +51,33 @@ use serde::{Deserialize, Serialize};
 // one place and both targets pick them up.
 // ============================================
 
-/// Maximum depth levels for orderbook bids/asks.
-/// Controls the size of FlatBuffer vectors and
-/// client-side rendering arrays.
-pub const MAX_DEPTH: usize = 25;
+/// Exponential smoothing factor for animation.
+/// Both server (tick serialization) and client (rendering)
+/// should agree on this for consistent behavior.
+pub const SMOOTHING_FACTOR: f64 = 0.08;
 
-/// Minimum tick size for price rounding.
-/// Prices are rounded to this increment before
-/// comparison or display. Prevents floating-point
-/// noise from creating false price levels.
-pub const TICK_SIZE: f64 = 0.01;
+/// How many seconds of time-series data to retain.
+pub const HISTORY_WINDOW_SEC: f64 = 30.0;
 
 /// Tolerance for floating-point comparisons.
-/// Two prices within EPSILON of each other are
-/// considered equal. Used in deduplication and
-/// level aggregation.
 pub const EPSILON: f64 = 1e-10;
-
-/// Maximum symbol length (bytes). Used for validation
-/// before sending commands or processing subscriptions.
-pub const MAX_SYMBOL_LEN: usize = 32;
 
 // ============================================
 // Domain Types
 //
-// These types are the shared contract. Both the
-// server engine's ingest/tick and the client engine's
-// deserialization/rendering use them.
-//
-// Keep them simple: no methods with side effects,
-// no platform-specific derives. serde is the only
-// external dependency (for optional JSON serialization
-// in tests or REST endpoints).
+// Replace these with your own domain types.
+// Keep them simple: no side effects, no platform-specific
+// derives. serde is optional (for JSON in tests or REST).
 // ============================================
 
-/// Market side: bid (buy) or ask (sell).
-///
-/// Used in orderbook processing, trade classification,
-/// and UI color mapping (bid = green, ask = red by convention).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Side {
-    Bid,
-    Ask,
-}
-
-impl Side {
-    /// Returns the opposite side. Useful for matching
-    /// incoming trades against the orderbook.
-    pub fn opposite(self) -> Self {
-        match self {
-            Side::Bid => Side::Ask,
-            Side::Ask => Side::Bid,
-        }
-    }
-}
-
-/// A single price level in an orderbook.
-///
-/// Matches the FlatBuffers `PriceLevel` struct in `schema/orderbook.fbs`:
-///   struct PriceLevel { price: double; size: double; }
-///
-/// This Rust struct is used for internal processing. The FlatBuffer struct
-/// is used for zero-copy serialization over the wire.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct PriceLevel {
-    /// Price at this level (must be > 0)
-    pub price: f64,
-    /// Aggregate size at this level (must be >= 0; 0 means level removed)
-    pub size: f64,
-}
-
-impl PriceLevel {
-    /// Create a new price level. Returns None if price <= 0 or size < 0.
-    pub fn new(price: f64, size: f64) -> Option<Self> {
-        if validate_price(price) && validate_size(size) {
-            Some(Self { price, size })
-        } else {
-            None
-        }
-    }
-
-    /// Whether this level has been removed (size dropped to zero).
-    pub fn is_removed(&self) -> bool {
-        self.size < EPSILON
-    }
-}
-
-/// A trade event with price, size, and side.
-///
-/// Used for trade classification, VWAP computation,
-/// and time-series data in the client engine.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Trade {
-    /// Trade price (must be > 0)
-    pub price: f64,
-    /// Trade size (must be > 0)
-    pub size: f64,
-    /// Aggressor side: Bid means buyer was the taker
-    pub side: Side,
-    /// Exchange timestamp in milliseconds since epoch
-    pub timestamp_ms: u64,
-}
+// Example: add your domain types here.
+//
+// pub enum Side { Bid, Ask }
+//
+// pub struct PriceLevel { pub price: f64, pub size: f64 }
+//
+// The point is: types that both server and client need
+// live here, so they can't drift out of sync.
 
 // ============================================
 // Validation Helpers
@@ -153,74 +88,43 @@ pub struct Trade {
 // reject the same invalid inputs.
 // ============================================
 
-/// Validate a price value: must be finite and positive.
-pub fn validate_price(price: f64) -> bool {
-    price.is_finite() && price > 0.0
+/// Validate a positive finite number (prices, sizes, etc.)
+pub fn validate_positive(value: f64) -> bool {
+    value.is_finite() && value > 0.0
 }
 
-/// Validate a size value: must be finite and non-negative.
-/// A size of 0.0 is valid (indicates level removal in orderbook deltas).
-pub fn validate_size(size: f64) -> bool {
-    size.is_finite() && size >= 0.0
+/// Validate a non-negative finite number.
+pub fn validate_non_negative(value: f64) -> bool {
+    value.is_finite() && value >= 0.0
 }
 
-/// Validate a symbol string: non-empty, within length limit, ASCII alphanumeric
-/// with common separators (dash, underscore, slash, dot).
-pub fn validate_symbol(symbol: &str) -> bool {
-    !symbol.is_empty()
-        && symbol.len() <= MAX_SYMBOL_LEN
-        && symbol
-            .bytes()
+/// Validate a string identifier: non-empty, within length limit,
+/// ASCII alphanumeric with common separators.
+pub fn validate_identifier(s: &str, max_len: usize) -> bool {
+    !s.is_empty()
+        && s.len() <= max_len
+        && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'/' || b == b'.')
 }
 
-/// Validate an orderbook depth parameter: must be between 1 and MAX_DEPTH.
-pub fn validate_depth(depth: u16) -> bool {
-    depth >= 1 && (depth as usize) <= MAX_DEPTH
-}
-
-/// Round a price to the nearest tick size.
-/// Prevents floating-point drift from creating spurious price levels.
-pub fn round_to_tick(price: f64) -> f64 {
-    (price / TICK_SIZE).round() * TICK_SIZE
-}
-
 // ============================================
-// Utility Helpers
+// Computation Helpers
 //
-// Pure computation functions shared between engines.
+// Pure functions used by both engines.
 // ============================================
 
-/// Compute orderbook imbalance: (bid_total - ask_total) / (bid_total + ask_total).
-///
-/// Returns 0.0 if both totals are zero (empty book).
-/// Range: -1.0 (all asks) to +1.0 (all bids).
-pub fn compute_imbalance(bid_total: f64, ask_total: f64) -> f64 {
-    let sum = bid_total + ask_total;
-    if sum < EPSILON {
+/// Clamp and normalize a value to 0.0..1.0 given a range.
+pub fn normalize(value: f64, min: f64, max: f64) -> f64 {
+    if (max - min).abs() < EPSILON {
         0.0
     } else {
-        (bid_total - ask_total) / sum
+        ((value - min) / (max - min)).clamp(0.0, 1.0)
     }
 }
 
-/// Compute mid price from best bid and best ask.
-/// Returns None if either side is missing.
-pub fn compute_mid_price(best_bid: Option<f64>, best_ask: Option<f64>) -> Option<f64> {
-    match (best_bid, best_ask) {
-        (Some(bid), Some(ask)) if validate_price(bid) && validate_price(ask) => {
-            Some((bid + ask) / 2.0)
-        }
-        _ => None,
-    }
-}
-
-/// Compute spread (ask - bid). Returns None if crossed or either side missing.
-pub fn compute_spread(best_bid: Option<f64>, best_ask: Option<f64>) -> Option<f64> {
-    match (best_bid, best_ask) {
-        (Some(bid), Some(ask)) if ask >= bid => Some(ask - bid),
-        _ => None,
-    }
+/// Linear interpolation between two values.
+pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    a + (b - a) * t.clamp(0.0, 1.0)
 }
 
 // ============================================
@@ -232,61 +136,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_side_opposite() {
-        assert_eq!(Side::Bid.opposite(), Side::Ask);
-        assert_eq!(Side::Ask.opposite(), Side::Bid);
+    fn test_validate_positive() {
+        assert!(validate_positive(1.0));
+        assert!(validate_positive(0.001));
+        assert!(!validate_positive(0.0));
+        assert!(!validate_positive(-1.0));
+        assert!(!validate_positive(f64::NAN));
+        assert!(!validate_positive(f64::INFINITY));
     }
 
     #[test]
-    fn test_price_level_validation() {
-        assert!(PriceLevel::new(100.0, 1.5).is_some());
-        assert!(PriceLevel::new(0.0, 1.0).is_none()); // price must be > 0
-        assert!(PriceLevel::new(-1.0, 1.0).is_none()); // negative price
-        assert!(PriceLevel::new(100.0, -0.5).is_none()); // negative size
-        assert!(PriceLevel::new(100.0, 0.0).is_some()); // zero size = removal
+    fn test_validate_identifier() {
+        assert!(validate_identifier("my-app", 32));
+        assert!(validate_identifier("data/stream_1", 32));
+        assert!(!validate_identifier("", 32));
+        assert!(!validate_identifier(&"a".repeat(33), 32));
+        assert!(!validate_identifier("has spaces", 32));
     }
 
     #[test]
-    fn test_validate_symbol() {
-        assert!(validate_symbol("BTC-USD"));
-        assert!(validate_symbol("ETH/USDT"));
-        assert!(validate_symbol("SOL_PERP"));
-        assert!(!validate_symbol("")); // empty
-        assert!(!validate_symbol(&"A".repeat(33))); // too long
-        assert!(!validate_symbol("BTC USD")); // space not allowed
+    fn test_normalize() {
+        assert!((normalize(50.0, 0.0, 100.0) - 0.5).abs() < EPSILON);
+        assert!((normalize(0.0, 0.0, 100.0) - 0.0).abs() < EPSILON);
+        assert!((normalize(150.0, 0.0, 100.0) - 1.0).abs() < EPSILON); // clamped
     }
 
     #[test]
-    fn test_validate_depth() {
-        assert!(validate_depth(1));
-        assert!(validate_depth(20));
-        assert!(validate_depth(MAX_DEPTH as u16));
-        assert!(!validate_depth(0));
-        assert!(!validate_depth(MAX_DEPTH as u16 + 1));
-    }
-
-    #[test]
-    fn test_round_to_tick() {
-        let rounded = round_to_tick(100.005);
-        assert!((rounded - 100.01).abs() < EPSILON);
-
-        let rounded = round_to_tick(100.004);
-        assert!((rounded - 100.00).abs() < EPSILON);
-    }
-
-    #[test]
-    fn test_imbalance() {
-        assert!((compute_imbalance(100.0, 100.0) - 0.0).abs() < EPSILON);
-        assert!((compute_imbalance(100.0, 0.0) - 1.0).abs() < EPSILON);
-        assert!((compute_imbalance(0.0, 100.0) - (-1.0)).abs() < EPSILON);
-        assert!((compute_imbalance(0.0, 0.0) - 0.0).abs() < EPSILON);
-    }
-
-    #[test]
-    fn test_mid_price_and_spread() {
-        assert_eq!(compute_mid_price(Some(100.0), Some(101.0)), Some(100.5));
-        assert_eq!(compute_mid_price(None, Some(101.0)), None);
-        assert_eq!(compute_spread(Some(100.0), Some(101.0)), Some(1.0));
-        assert_eq!(compute_spread(Some(101.0), Some(100.0)), None); // crossed
+    fn test_lerp() {
+        assert!((lerp(0.0, 100.0, 0.5) - 50.0).abs() < EPSILON);
+        assert!((lerp(0.0, 100.0, 0.0) - 0.0).abs() < EPSILON);
+        assert!((lerp(0.0, 100.0, 1.0) - 100.0).abs() < EPSILON);
     }
 }

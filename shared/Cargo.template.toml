@@ -34,10 +34,8 @@ edition = "2021"
 crate-type = ["rlib"]
 
 [dependencies]
-# Serialization support for domain types.
-# Used for JSON export in tests, REST endpoints, or debug logging.
-# The "derive" feature enables #[derive(Serialize, Deserialize)].
-serde = { version = "1", features = ["derive"] }
+# Uncomment if your domain types need serialization:
+# serde = { version = "1", features = ["derive"] }
 
 # --- Optional dependencies ---
 # Uncomment as needed:

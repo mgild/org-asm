@@ -159,14 +159,14 @@ fn handle_subscribe(
     depth: u16,
     state: &mut ClientState,
 ) -> Option<Vec<u8>> {
-    // Validate inputs using shared crate validation
-    // use my_shared::{validate_symbol, validate_depth};
+    // Validate inputs using shared crate helpers
+    // use my_shared::validate_identifier;
     //
-    // if !validate_symbol(symbol) {
+    // if !validate_identifier(symbol, 32) {
     //     warn!("Command {id}: invalid symbol '{symbol}'");
     //     return None;
     // }
-    // if !validate_depth(depth) {
+    // if depth == 0 || depth > 100 {
     //     warn!("Command {id}: invalid depth {depth}");
     //     return None;
     // }

@@ -298,14 +298,17 @@ cp node_modules/org-asm/shared/Cargo.template.toml crates/shared/Cargo.toml
 ```
 
 ```rust
-// crates/shared/src/lib.rs
-pub enum Side { Bid, Ask }
+// crates/shared/src/lib.rs — add your domain types here
+pub const SMOOTHING_FACTOR: f64 = 0.08;
+pub const HISTORY_WINDOW_SEC: f64 = 30.0;
 
-pub fn validate_price(price: f64) -> bool {
-    price > 0.0 && price.is_finite()
+pub fn validate_positive(value: f64) -> bool {
+    value.is_finite() && value > 0.0
 }
 
-pub const MAX_DEPTH: usize = 25;
+pub fn normalize(value: f64, min: f64, max: f64) -> f64 {
+    ((value - min) / (max - min)).clamp(0.0, 1.0)
+}
 ```
 
 Both server and WASM crates import this:
