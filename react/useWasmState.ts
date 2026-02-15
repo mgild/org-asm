@@ -20,18 +20,56 @@ export interface WasmNotifier {
   subscribe(callback: () => void): () => void;
   /** Notify all subscribers that state has changed. */
   notify(): void;
+  /**
+   * Batch multiple mutations into a single notification.
+   * Calls inside the batch run synchronously; subscribers are notified
+   * once at the end, regardless of how many times notify() was called.
+   *
+   * Usage:
+   *   notifier.batch(() => {
+   *     for (const msg of messages) {
+   *       engine.ingest(msg);
+   *       notifier.notify(); // suppressed during batch
+   *     }
+   *   }); // single notify fires here
+   */
+  batch(fn: () => void): void;
 }
 
 /** Create a minimal pub/sub notifier for WASM state changes. */
 export function createNotifier(): WasmNotifier {
   const listeners = new Set<() => void>();
+  let batching = false;
+  let batchDirty = false;
+
+  function fire(): void {
+    for (const cb of listeners) cb();
+  }
+
   return {
     subscribe(callback: () => void): () => void {
       listeners.add(callback);
       return () => { listeners.delete(callback); };
     },
     notify(): void {
-      for (const cb of listeners) cb();
+      if (batching) {
+        batchDirty = true;
+        return;
+      }
+      fire();
+    },
+    batch(fn: () => void): void {
+      batching = true;
+      batchDirty = false;
+      try {
+        fn();
+      } finally {
+        batching = false;
+        if (batchDirty) {
+          batchDirty = false;
+          fire();
+        }
+      }
     },
   };
 }

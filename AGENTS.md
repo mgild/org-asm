@@ -33,9 +33,17 @@ Real-time animation (60fps)?
 Synchronous value from engine (validation, formatting, derived)?
   → useWasmCall(() => engine.method(args), [deps])
 
+Debounced value from engine (search, autocomplete)?
+  → useDebouncedWasmCall(() => engine.search(query), [query], 200)
+  → Returns T | null (null until first debounced call)
+
 React to external state changes (WebSocket, events)?
   → useWasmState(notifier, () => engine.snapshot())
   → Call notifier.notify() after engine mutation
+
+React to external changes but snapshot is an object?
+  → useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.ask() }))
+  → Shallow equality prevents re-renders when values unchanged
 
 Async operation (fetch-in-WASM, worker offload)?
   → useAsyncWasmCall(() => engine.asyncMethod(args), [deps])
@@ -92,6 +100,34 @@ const { result, loading } = useAsyncWasmCall(
 );
 ```
 
+### Batch rapid-fire mutations
+```ts
+pipeline.onBinaryMessage(data => {
+  notifier.batch(() => {
+    for (const msg of parseMessages(data)) {
+      engine.ingest(msg);
+      notifier.notify(); // suppressed during batch
+    }
+  }); // single notify fires here
+});
+```
+
+### Catch WASM panics
+```ts
+<WasmErrorBoundary
+  fallback={({ error, reset }) => (
+    <div>
+      <p>Engine crashed: {error.message}</p>
+      <button onClick={reset}>Restart</button>
+    </div>
+  )}
+  onError={reportToSentry}
+  onReset={() => reinitializeEngine()}
+>
+  <App />
+</WasmErrorBoundary>
+```
+
 ### 60fps rendering with React throttling
 ```ts
 const { memory, ready } = useWasm(() => init());
@@ -121,11 +157,14 @@ const [state, dispatch] = useWasmReducer(engine, {
 | `useEngine` | Register engine on shared MultiAnimationLoop |
 | `useFrame` | Throttled frame value subscription |
 | `useWasmCall` | Sync on-demand WASM call |
+| `useDebouncedWasmCall` | Debounced sync WASM call (search/autocomplete) |
 | `useWasmState` | Reactive state via useSyncExternalStore |
+| `useWasmSelector` | Like useWasmState with structural equality |
 | `useAsyncWasmCall` | Async WASM call with loading/error |
 | `useWasmStream` | Streaming chunked results |
 | `useWasmReducer` | Rust-first useReducer |
 | `createWasmContext` | Shared engine context factory |
+| `WasmErrorBoundary` | Error boundary for WASM panics with reset |
 | `useConnection` | WebSocket/SSE with state tracking |
 | `useWorker` | Off-main-thread WASM via SharedArrayBuffer |
 | `useResponseRegistry` | Command response correlation |

@@ -214,7 +214,9 @@ Chunks are batched via `requestAnimationFrame` to avoid excessive re-renders.
 | Hook | Trigger | Blocking? | Use Case |
 |------|---------|-----------|----------|
 | `useWasmCall(fn, deps)` | React deps change | Sync | Validation, formatting, derived values |
+| `useDebouncedWasmCall(fn, deps, ms)` | React deps change | Sync (debounced) | Search, autocomplete, filter-as-you-type |
 | `useWasmState(notifier, snap)` | Explicit notify | Sync | Balance, counts, externally-mutated state |
+| `useWasmSelector(notifier, snap, eq?)` | Explicit notify | Sync | Object snapshots without re-render churn |
 | `useAsyncWasmCall(fn, deps)` | React deps change | Async | Fetch-in-WASM, worker offload |
 | `useWasmStream(fn, deps)` | React deps change | Streaming | Large dataset processing, progress |
 | `useWasmReducer(engine, config)` | Dispatch action | Sync/Async | CRUD apps, forms, state machines |

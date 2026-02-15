@@ -459,11 +459,14 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useEngine(loop, tickSource)` | `EngineHandle \| null` | Register a raw tick source on a shared `MultiAnimationLoop` |
 | `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
 | `useWasmCall(fn, deps)` | `T` | Synchronous on-demand WASM call (validation, formatting, derived values) |
+| `useDebouncedWasmCall(fn, deps, ms)` | `T \| null` | Debounced WASM call for search/autocomplete (fires after quiet period) |
 | `useWasmState(notifier, getSnapshot)` | `T` | Reactive WASM state via `useSyncExternalStore` — re-reads on `notify()` |
+| `useWasmSelector(notifier, snap, isEqual?)` | `T` | Like `useWasmState` but with structural equality — prevents re-renders for object snapshots |
 | `useAsyncWasmCall(fn, deps)` | `{ result, loading, error }` | Async WASM call with cancellation (wasm-bindgen-futures or worker offload) |
 | `useWasmStream(fn, deps)` | `{ chunks, done, error }` | Streaming chunked results from WASM with rAF-batched updates |
 | `useWasmReducer(engine, config)` | `[S, dispatch]` | Rust-first state management — engine owns state, dispatch triggers mutation + re-render |
 | `createWasmContext<E>()` | `{ WasmProvider, useEngine, useNotifier }` | Factory for sharing engine + notifier across component tree without prop drilling |
+| `WasmErrorBoundary` | React component | Error boundary for WASM panics — catches errors, shows fallback, supports reset |
 | `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
 | `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
 | `useResponseRegistry(pipeline, extractId, options?)` | `ResponseRegistry<R> \| null` | Wire response correlation as binary middleware + disconnect cleanup |
@@ -488,7 +491,7 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 | `IEffectApplicator` | Extends `IFrameConsumer` with `bind()`, `unbind()`, `getCSSEffects()` |
 | `IWasmIngestEngine` | WASM-side message parsing via `ingest_message()` |
 | `IWasmBinaryIngestEngine` | Binary frame ingestion via `ingest_frame()` for server engine pipeline |
-| `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()` |
+| `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()`, `batch()` |
 
 ### View
 
@@ -749,6 +752,7 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] On-demand WASM hooks (`useWasmCall`, `useWasmState`, `useAsyncWasmCall`, `useWasmStream`)
 - [x] Task worker for one-off computation (`WasmTaskWorker` + `task-worker-entry`)
 - [x] Shared engine context (`createWasmContext`) and reducer pattern (`useWasmReducer`)
+- [x] Production hardening (`useWasmSelector`, `useDebouncedWasmCall`, `WasmErrorBoundary`, batch notifications)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Benchmark suite
 
