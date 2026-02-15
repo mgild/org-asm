@@ -88,6 +88,29 @@ export enum ConnectionState {
   Reconnecting = 'reconnecting',
 }
 
+// ============================================
+// WASM Result type
+// ============================================
+
+/** Successful WASM call result */
+export interface WasmOk<T> {
+  readonly ok: true;
+  readonly value: T;
+}
+
+/** Failed WASM call result */
+export interface WasmErr {
+  readonly ok: false;
+  readonly error: string;
+}
+
+/** Structured result from fallible WASM methods. Mirrors Rust's Result<T, E>. */
+export type WasmResult<T> = WasmOk<T> | WasmErr;
+
+// ============================================
+// Connection state types
+// ============================================
+
 /** Structured connection error surfaced via onError handler */
 export interface ConnectionError {
   readonly type: 'connect_failed' | 'connection_lost' | 'max_retries_exhausted';

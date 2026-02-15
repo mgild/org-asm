@@ -1,7 +1,7 @@
 {
   "name": "org-asm",
   "version": "0.1.0",
-  "description": "Rust-first MVC for 60fps React applications. Structured real-time rendering where WASM owns the state and JS is the thin rendering layer.",
+  "description": "Rust-first MVC for React applications. All logic that can live in Rust, lives in Rust — state, validation, computation, business rules. TypeScript is the thin rendering and I/O layer.",
   "type": "module",
   "bin": {
     "org-asm": "./bin/org-asm.mjs"

@@ -1,7 +1,7 @@
 # Skill: Real-Time Rendering at 60fps
 
 ## When to Use
-When building UIs that update at 60fps (charts, animations, games, simulations). The core challenge: 60fps data must NEVER trigger React re-renders.
+When building UIs that update at 60fps (charts, animations, games, simulations). This is the real-time rendering pattern within orgASM — one of several ways the Rust Model exposes state to the TypeScript View. The core challenge: 60fps data must NEVER trigger React re-renders.
 
 ## Architecture: Three-Speed Data Flow
 

@@ -34,3 +34,11 @@ export { CommandBuilder, CommandSender } from './CommandSender';
 export { ResponseRegistry } from './ResponseRegistry';
 export { SubscriptionManager } from './SubscriptionManager';
 export type { BinaryMiddleware } from './WebSocketPipeline';
+
+// Task worker (request/response path)
+export { WasmTaskWorker } from './WasmTaskWorker';
+export type {
+  WasmTaskWorkerConfig,
+  TaskMainToWorkerMessage,
+  TaskWorkerToMainMessage,
+} from './WasmTaskWorker';

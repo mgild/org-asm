@@ -1,25 +1,27 @@
 # orgASM 💦🍆
 
-**Organized Assembly for Structured Motion.**
+**Organized Assembly for Structured Machines.**
 
-A Rust-first MVC framework for building 60fps React applications where computation lives in WebAssembly and TypeScript is reduced to a thin rendering layer.
+A Rust-first MVC framework for React applications. All logic that can live in Rust, lives in Rust — state management, validation, data processing, real-time computation, business rules. TypeScript is reduced to a thin rendering and I/O layer.
 
 ---
 
 ## Problem
 
-Real-time web apps — data visualization, simulations, live dashboards, trading interfaces — face a structural tension: computation runs at 60fps but React re-renders are expensive. The typical result is a tangle of `useRef`, `requestAnimationFrame`, manual DOM mutations, and ad-hoc throttling scattered across components. No separation of concerns. No testability. No reuse.
+Web applications scatter logic across TypeScript: state management, validation, data transforms, real-time processing, business rules — all reimplemented in a language without types you can trust, ownership semantics, or predictable performance. The result: fragile state, subtle bugs, duplicated logic between client and server, and performance cliffs under load.
+
+For real-time apps (trading, dashboards, simulations), it gets worse: 60fps computation collides with React's render model, producing ad-hoc `useRef` / `requestAnimationFrame` / manual DOM hacks with no separation of concerns.
 
 ## Solution
 
-orgASM provides a complete MVC architecture for real-time WASM+React applications:
+orgASM moves everything except rendering and I/O into Rust:
 
-- **Model** (Rust/WASM): Owns all state and computation. `tick()` serializes state into a FlatBuffer frame — JS reads it zero-copy from WASM linear memory. One WASM call per frame instead of N getter calls.
-- **View** (TypeScript + React hooks): Applies frame data to DOM, canvas, and charts. Priority-ordered consumers handle data sync, visual effects, and React state updates at different rates.
-- **Controller** (TypeScript): Routes external data (WebSocket) and user input to the Model. Handles connection lifecycle, message parsing, and bidirectional commands.
-- **Server** (Rust/Axum): Optional upstream engine that ingests exchange data and broadcasts FlatBuffer frames to all clients over binary WebSocket.
+- **Model** (Rust/WASM): Owns all application state, business logic, validation, and computation. Exposes state to JS via FlatBuffer frames — zero-copy reads from WASM linear memory. One boundary crossing instead of N getter calls.
+- **View** (TypeScript + React hooks): Thin rendering layer. Reads state from the Model, writes to DOM/canvas/charts. No business logic, no derived state, no validation.
+- **Controller** (TypeScript): Routes external data (WebSocket, SSE) and user input to the Model. Handles connection lifecycle, message parsing, and bidirectional commands.
+- **Server** (Rust/Axum): Optional upstream engine sharing the same Rust crate as the client. Ingests data, processes it, broadcasts FlatBuffer frames over binary WebSocket.
 
-At 60fps with 39 frame fields, the FlatBuffer protocol makes **60 boundary crossings/sec instead of 2,340**.
+The Rust Model handles state, validation, data transforms, and real-time computation. TypeScript handles what it's good at: DOM access, browser APIs, and React rendering. For real-time paths, the FlatBuffer protocol makes **60 boundary crossings/sec instead of 2,340** (at 60fps with 39 fields).
 
 ## Architecture
 
@@ -34,12 +36,13 @@ At 60fps with 39 frame fields, the FlatBuffer protocol makes **60 boundary cross
                    │ Binary WebSocket (FlatBuffer bytes)
 ┌──────────────────▼───────────────────┐
 │          MODEL (Rust WASM)           │
-│  Engine struct owns ALL state        │
+│  ALL state, logic, validation        │
 │  tick(now_ms) → FlatBuffer frame     │
 │  ingest_frame(&[u8]) ← server bytes │
+│  Business rules, data transforms     │
 │  Shared crate for domain types       │
 └──────────────────┬───────────────────┘
-                   │ Frame (FlatBuffer)
+                   │ FlatBuffer frames / method calls
 ┌──────────────────▼───────────────────┐
 │          VIEW (TypeScript + React)   │
 │  AnimationLoop    → orchestrates     │
@@ -59,15 +62,29 @@ At 60fps with 39 frame fields, the FlatBuffer protocol makes **60 boundary cross
 └──────────────────────────────────────┘
 ```
 
-### Three-Speed Data Flow
+### What Lives Where
+
+| Rust (Model) | TypeScript (View + Controller) |
+|---|---|
+| Application state | DOM rendering |
+| Business rules & validation | React components & hooks |
+| Data transforms & aggregation | Browser API access |
+| Real-time computation (tick) | WebSocket / SSE I/O |
+| Message parsing (serde) | User input routing |
+| Derived values & formatting | CSS / canvas writes |
+
+### Data Flow Speeds
 
 ```
-60fps:  Engine.tick() → Canvas/DOM         (module-level, zero React)
-~10fps: useFrame() / ThrottledStateSync    (React re-renders)
-~1fps:  Config changes → Engine.set_*()    (user interaction)
+60fps:      Engine.tick() → Canvas/DOM             (module-level, zero React)
+~10fps:     useFrame() / ThrottledStateSync        (React re-renders)
+on-demand:  useWasmCall() / useWasmState()         (validation, events, derived values)
+async:      useAsyncWasmCall()                     (worker offload, wasm-bindgen-futures)
+streaming:  useWasmStream()                        (large dataset processing, progress)
+~1fps:      Config changes → Engine.set_*()        (user settings)
 ```
 
-These speeds never mix. 60fps data flows through the frame buffer and direct DOM writes. React only sees throttled snapshots at ~10fps. Configuration changes are infrequent method calls.
+Real-time paths use the frame buffer and direct DOM writes — React never sees 60fps data. Throttled snapshots reach React at ~10fps. On-demand calls (validation, computation) return results directly.
 
 ## Install
 
@@ -204,7 +221,7 @@ function App() {
 }
 ```
 
-5 lines to go from nothing to connected + rendering at 60fps.
+5 lines to go from nothing to connected, with all state and logic in Rust.
 
 ### 4. Connect a Data Source
 
@@ -441,6 +458,10 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useEngine(loop, engine, memory, rootFn)` | `EngineHandle \| null` | Register a FlatBuffer engine on a shared `MultiAnimationLoop` |
 | `useEngine(loop, tickSource)` | `EngineHandle \| null` | Register a raw tick source on a shared `MultiAnimationLoop` |
 | `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
+| `useWasmCall(fn, deps)` | `T` | Synchronous on-demand WASM call (validation, formatting, derived values) |
+| `useWasmState(notifier, getSnapshot)` | `T` | Reactive WASM state via `useSyncExternalStore` — re-reads on `notify()` |
+| `useAsyncWasmCall(fn, deps)` | `{ result, loading, error }` | Async WASM call with cancellation (wasm-bindgen-futures or worker offload) |
+| `useWasmStream(fn, deps)` | `{ chunks, done, error }` | Streaming chunked results from WASM with rAF-batched updates |
 | `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
 | `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
 | `useResponseRegistry(pipeline, extractId, options?)` | `ResponseRegistry<R> \| null` | Wire response correlation as binary middleware + disconnect cleanup |
@@ -465,6 +486,7 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 | `IEffectApplicator` | Extends `IFrameConsumer` with `bind()`, `unbind()`, `getCSSEffects()` |
 | `IWasmIngestEngine` | WASM-side message parsing via `ingest_message()` |
 | `IWasmBinaryIngestEngine` | Binary frame ingestion via `ingest_frame()` for server engine pipeline |
+| `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()` |
 
 ### View
 
@@ -612,6 +634,19 @@ const { loop, bridge, ready } = useWorker({
 const intensity = useFrame(loop, f => f[0], 100);
 ```
 
+#### `WasmTaskWorker`
+
+Promise-based worker for one-off WASM computation. Unlike `WorkerBridge` (frame-oriented with SharedArrayBuffer + tick interval), `WasmTaskWorker` is request/response: send a method name + args, get a Promise back.
+
+| Method | Description |
+|--------|-------------|
+| `constructor(config)` | Create worker with `workerUrl`, `wasmUrl`, `engineConstructor` |
+| `initialize()` | Spawn worker, load WASM, wait for ready |
+| `call(method, args?)` | Invoke engine method, returns `Promise<T>` |
+| `ready` | Whether the worker is initialized |
+| `pendingCount` | Number of in-flight calls |
+| `dispose()` | Terminate worker, reject pending calls |
+
 #### `SharedBufferTickSource`
 
 Factory functions for creating tick sources that read from `SharedArrayBuffer`:
@@ -663,14 +698,13 @@ Template for processing client commands (subscribe/unsubscribe). See `server/com
 | `struct` | inline struct | zero-copy, no vtable |
 | `[struct]` | `&[T]` | sequential cache-friendly access |
 
-## Performance Design
+## Design Principles
 
-- **1 WASM call per frame** — `tick()` serializes state into a FlatBuffer, JS reads zero-copy
-- **Zero allocations in the render loop** — FlatBuffer bytes read directly from WASM linear memory
-- **Version-gated data copies** — chart data only copied when `data_version()` changes
-- **Throttled React updates** — 60fps data reaches React at ~10fps via `useFrame()` hook
-- **Batched canvas rendering** — color-quantized Path2D batching reduces GPU state changes 10-30x
-- **Shared Rust crate** — domain logic compiled once, used in both server (native) and client (WASM)
+- **Rust owns all state** — no JS-side state duplication. The WASM engine is the single source of truth.
+- **Shared Rust crate** — domain logic, validation, and types compiled once, used in both server (native) and client (WASM). No logic duplication across tiers.
+- **Minimal boundary crossings** — FlatBuffer frames batch all state into one WASM→JS call. On-demand methods return results directly.
+- **Zero allocations in hot paths** — FlatBuffer bytes read directly from WASM linear memory, pre-allocated buffers reused per frame
+- **Throttled React updates** — 60fps data reaches React at ~10fps via `useFrame()` hook. Real-time paths bypass React entirely.
 - **FlatBuffer commands** — typed bidirectional communication, builder reuse eliminates allocation
 - **Composable binary middleware** — `pipeline.use()` chain with zero-copy pass-through, no handler conflicts
 
@@ -709,6 +743,8 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] Reconnect resubscribe (`SubscriptionManager` + `useSubscriptionManager`)
 - [x] DevTools panel (`OrgAsmDevTools` + `useOrgAsmDiagnostics`)
 - [x] Multi-engine shared animation loop (`MultiAnimationLoop` + `useEngine`)
+- [x] On-demand WASM hooks (`useWasmCall`, `useWasmState`, `useAsyncWasmCall`, `useWasmStream`)
+- [x] Task worker for one-off computation (`WasmTaskWorker` + `task-worker-entry`)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Benchmark suite
 

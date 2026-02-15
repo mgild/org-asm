@@ -1,10 +1,12 @@
 # Skill: WASM Engine Pattern
 
 ## When to Use
-When building any real-time application where:
-- Computation runs at 60fps (animations, simulations, data visualization)
-- State is complex (multiple interacting values, history, derived data)
-- Performance matters (boundary crossings are the bottleneck, not computation)
+When building any application where logic belongs in Rust:
+- State management — ownership and mutation controlled by Rust, not scattered across JS
+- Validation and business rules — write once in Rust, run on server (native) and client (WASM)
+- Real-time computation — 60fps animations, simulations, data visualization
+- Data transforms — parsing, aggregation, derived values
+- Performance-sensitive paths — boundary crossings are the bottleneck, not computation
 
 ## The Pattern
 
@@ -146,6 +148,76 @@ pub fn add_data_point(&mut self, value: f64, timestamp_sec: f64, now_ms: f64) {
     // ... process ...
 }
 ```
+
+## Non-Tick Data Paths
+
+Not all WASM interaction happens at 60fps. The framework provides hooks for every call pattern:
+
+### Synchronous On-Demand (`useWasmCall`)
+For validation, formatting, derived values — any synchronous engine method called when React deps change:
+
+```ts
+const isValid = useWasmCall(() => engine.validate(input), [input]);
+const formatted = useWasmCall(() => engine.format_amount(value, 2), [value]);
+```
+
+Thin wrapper over `useMemo`. The name signals "WASM boundary crossing."
+
+### Reactive State (`useWasmState`)
+When external events (WebSocket, user actions) mutate engine state outside the tick loop:
+
+```ts
+const notifier = useMemo(() => createNotifier(), []);
+pipeline.onMessage(raw => { engine.ingest_message(raw); notifier.notify(); });
+
+const balance = useWasmState(notifier, () => engine.balance());
+```
+
+Uses `useSyncExternalStore` under the hood. Re-reads snapshot only when `notify()` is called.
+
+### Async Calls (`useAsyncWasmCall`)
+Three async patterns, one hook:
+
+1. **wasm-bindgen-futures** — Rust `async fn` calling JS APIs (fetch, IndexedDB):
+   ```ts
+   const { result, loading, error } = useAsyncWasmCall(
+     () => engine.fetch_and_process(url), [url],
+   );
+   ```
+
+2. **Worker offload** — heavy computation off main thread via `WasmTaskWorker`:
+   ```ts
+   const worker = useMemo(() => new WasmTaskWorker(config), []);
+   const { result, loading, error } = useAsyncWasmCall(
+     () => worker.call('optimize', { data }), [data],
+   );
+   ```
+
+3. **Any Promise** — works with any async operation returning a Promise.
+
+Latest-wins cancellation: when deps change, stale results are discarded.
+
+### Streaming Results (`useWasmStream`)
+For long computations yielding results incrementally:
+
+```ts
+const { chunks, done, error } = useWasmStream(
+  (emit) => engine.process_large_dataset(data, emit),
+  [data],
+);
+```
+
+Chunks are batched via `requestAnimationFrame` to avoid excessive re-renders.
+
+### Hook Mental Model
+
+| Hook | Trigger | Blocking? | Use Case |
+|------|---------|-----------|----------|
+| `useWasmCall(fn, deps)` | React deps change | Sync | Validation, formatting, derived values |
+| `useWasmState(notifier, snap)` | Explicit notify | Sync | Balance, counts, externally-mutated state |
+| `useAsyncWasmCall(fn, deps)` | React deps change | Async | Fetch-in-WASM, worker offload |
+| `useWasmStream(fn, deps)` | React deps change | Streaming | Large dataset processing, progress |
+| `useFrame(loop, extract, ms)` | Animation tick | Sync (60fps) | CSS effects, animations, real-time charts |
 
 ## Anti-Patterns to Avoid
 1. **Individual WASM calls per value** -- Each getter/setter crosses the boundary. Use the frame buffer instead.
