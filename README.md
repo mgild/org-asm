@@ -267,38 +267,34 @@ impl ServerEngine for OrderbookEngine {
 
 ### 6. Send Commands to the Server
 
-Generate a typed `CommandBuilder` subclass from your `.fbs` schema:
+Generate typed command helpers from your `.fbs` schema:
 
 ```bash
 npx org-asm gen-builder schema/commands.fbs -o src/generated/
 ```
 
-This produces a `CommandsBuilder` with nested table objects — no manual boilerplate:
+For schemas with a union-based root type (like `commands.fbs`), this produces three files:
+- `CommandsBuilder.ts` — fluent builder helpers (all schemas)
+- `CommandsSender.ts` — typed `CommandSender` subclass with one method per union member
+- `useCommands.ts` — React hook returning the sender
+
+Use the generated hook directly — no manual subclass needed:
 
 ```ts
-import { CommandSender } from 'org-asm/controller';
-import { CommandsBuilder } from './generated/CommandsBuilder';
-import { Command } from './generated/org-asm/commands/command';
+import { useConnection } from 'org-asm/react';
+import { useCommands } from './generated/useCommands';
 
-class MyCommands extends CommandSender<CommandsBuilder> {
-  constructor(pipeline: WebSocketPipeline) { super(pipeline, new CommandsBuilder()); }
+const { pipeline } = useConnection({ url: 'wss://...' });
+const commands = useCommands(pipeline);
 
-  subscribe(symbol: string, depth = 20): bigint {
-    return this.send(b => {
-      const sym = b.createString(symbol);
-      const sub = b.subscribe.start().addSymbol(sym).addDepth(depth).end();
-      return b.commandMessage.start()
-        .addId(b.id)
-        .addCommandType(Command.Subscribe)
-        .addCommand(sub)
-        .end();
-    });
-  }
-}
-
-const commands = new MyCommands(pipeline);
-commands.subscribe('BTC-USD', 20);
+commands.subscribe({ symbol: 'BTC-USD', depth: 20 });
+commands.unsubscribe({ symbol: 'BTC-USD' });
+commands.requestSnapshot();
 ```
+
+Fields with schema defaults (e.g. `depth: uint16 = 20`) become optional in the generated args.
+
+Use `--no-sender` to skip sender+hook generation, or `--no-hook` to skip just the hook.
 
 ### 7. Shared Rust Crate
 
@@ -503,7 +499,7 @@ Template for processing client commands (subscribe/unsubscribe). See `server/com
 |---------|-------------|
 | `npx org-asm init <name>` | Scaffold full-stack project (WASM + server + shared + React) |
 | `npx org-asm build` | Run `flatc` + `wasm-pack` + `cargo build` pipeline |
-| `npx org-asm gen-builder <schema.fbs>` | Generate `CommandBuilder` subclass from FlatBuffers schema |
+| `npx org-asm gen-builder <schema.fbs>` | Generate builder + sender + hook from FlatBuffers schema (sender/hook for union schemas only) |
 
 ## FlatBuffers Schema Types
 

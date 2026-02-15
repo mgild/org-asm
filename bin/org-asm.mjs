@@ -273,16 +273,21 @@ async function cmdGenBuilder(gbArgs) {
 ${bold('org-asm gen-builder')} ${dim('<schema.fbs>')}
 
 Generate a CommandBuilder subclass from a FlatBuffers schema file.
+For schemas with a union-based root type, also generates a typed CommandSender
+subclass and a React hook.
 
 ${bold('OPTIONS')}
   ${cyan('<schema.fbs>')}             Path to FlatBuffers schema file (required)
   ${cyan('-o <outDir>')}              Output directory (default: src/generated/)
   ${cyan('--name <ClassName>')}       Generated class name (default: {SchemaName}Builder)
   ${cyan('--framework-import <path>')}  Import path for CommandBuilder (default: org-asm/controller)
+  ${cyan('--no-sender')}              Skip sender + hook generation
+  ${cyan('--no-hook')}                Skip hook generation (sender still generated)
 
 ${bold('EXAMPLES')}
   npx org-asm gen-builder schema/commands.fbs
   npx org-asm gen-builder schema/commands.fbs -o src/generated/ --name CommandsBuilder
+  npx org-asm gen-builder schema/commands.fbs --no-sender
 `);
     process.exit(0);
   }
@@ -292,6 +297,8 @@ ${bold('EXAMPLES')}
   let outDir = 'src/generated/';
   let className = null;
   let frameworkImport = 'org-asm/controller';
+  let noSender = false;
+  let noHook = false;
 
   for (let i = 0; i < gbArgs.length; i++) {
     const arg = gbArgs[i];
@@ -301,6 +308,10 @@ ${bold('EXAMPLES')}
       className = gbArgs[++i];
     } else if (arg === '--framework-import' && i + 1 < gbArgs.length) {
       frameworkImport = gbArgs[++i];
+    } else if (arg === '--no-sender') {
+      noSender = true;
+    } else if (arg === '--no-hook') {
+      noHook = true;
     } else if (!arg.startsWith('-')) {
       schemaPath = arg;
     }
@@ -332,20 +343,20 @@ ${bold('EXAMPLES')}
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const codegenPath = join(__dirname, '..', 'codegen', 'generate-builder.mjs');
-  const { parseFbs, generateBuilder } = await import(codegenPath);
+  const { parseFbs, generateBuilder, canGenerateSender, generateSender, generateHook } = await import(codegenPath);
 
   // Parse and generate
   const source = readFileSync(resolvedSchema, 'utf-8');
   const schema = parseFbs(source);
-  const output = generateBuilder(schema, { className, frameworkImport });
+  const builderOutput = generateBuilder(schema, { className, frameworkImport });
 
-  // Write output
+  // Write builder output
   const resolvedOutDir = resolve(outDir);
   mkdirSync(resolvedOutDir, { recursive: true });
-  const outFile = join(resolvedOutDir, `${className}.ts`);
-  writeFileSync(outFile, output, 'utf-8');
+  const builderFile = join(resolvedOutDir, `${className}.ts`);
+  writeFileSync(builderFile, builderOutput, 'utf-8');
 
-  console.log(`\n${green(bold('Generated'))} ${cyan(outFile)}`);
+  console.log(`\n${green(bold('Generated'))} ${cyan(builderFile)}`);
   console.log(`  ${dim('Class:')} ${className}`);
   console.log(`  ${dim('Tables:')} ${schema.tables.map((t) => t.name).join(', ')}`);
   if (schema.unions.length > 0) {
@@ -357,6 +368,38 @@ ${bold('EXAMPLES')}
   if (schema.structs.length > 0) {
     console.log(`  ${dim('Structs:')} ${schema.structs.map((s) => s.name).join(', ')}`);
   }
+
+  // Generate sender + hook for union schemas
+  if (!noSender && canGenerateSender(schema)) {
+    // Derive sender class name from builder class name: FooBuilder → FooSender
+    const senderClassName = className.replace(/Builder$/, 'Sender');
+
+    const senderOutput = generateSender(schema, {
+      senderClassName,
+      builderClassName: className,
+      frameworkImport,
+    });
+
+    const senderFile = join(resolvedOutDir, `${senderClassName}.ts`);
+    writeFileSync(senderFile, senderOutput, 'utf-8');
+    console.log(`${green(bold('Generated'))} ${cyan(senderFile)}`);
+
+    if (!noHook) {
+      // Derive hook name: CommandsSender → useCommands
+      const hookName = 'use' + senderClassName.replace(/Sender$/, '');
+
+      const hookOutput = generateHook(schema, {
+        hookName,
+        senderClassName,
+        frameworkImport,
+      });
+
+      const hookFile = join(resolvedOutDir, `${hookName}.ts`);
+      writeFileSync(hookFile, hookOutput, 'utf-8');
+      console.log(`${green(bold('Generated'))} ${cyan(hookFile)}`);
+    }
+  }
+
   console.log('');
 }
 
