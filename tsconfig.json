@@ -20,7 +20,8 @@
     "core/**/*.ts",
     "model/**/*.ts",
     "view/**/*.ts",
-    "controller/**/*.ts"
+    "controller/**/*.ts",
+    "react/**/*.ts"
   ],
   "exclude": [
     "dist",

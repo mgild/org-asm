@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Rust-first MVC for 60fps React applications. Structured real-time rendering where WASM owns the state and JS is the thin rendering layer.",
   "type": "module",
+  "bin": {
+    "org-asm": "./bin/org-asm.mjs"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -30,16 +33,25 @@
       "types": "./controller/index.ts",
       "import": "./dist/controller/index.js",
       "default": "./controller/index.ts"
+    },
+    "./react": {
+      "types": "./react/index.ts",
+      "import": "./dist/react/index.js",
+      "default": "./react/index.ts"
     }
   },
   "files": [
+    "bin",
     "dist",
     "schema",
     "model/engine-template.rs",
     "model/Cargo.template.toml",
+    "shared/lib-template.rs",
+    "shared/Cargo.template.toml",
     "server/engine-trait.rs",
     "server/broadcast.rs",
     "server/main-template.rs",
+    "server/command-handler-template.rs",
     "server/Cargo.template.toml",
     "guides"
   ],
@@ -68,13 +80,15 @@
     "flatbuffers": "^24.0.0"
   },
   "peerDependencies": {
-    "zustand": ">=4.0.0",
-    "rxjs": ">=7.0.0"
+    "react": ">=18.0.0",
+    "rxjs": ">=7.0.0",
+    "zustand": ">=4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/react": "^19.2.14",
+    "rxjs": "^7.8.0",
     "typescript": "^5.7.0",
-    "zustand": "^5.0.0",
-    "rxjs": "^7.8.0"
+    "zustand": "^5.0.0"
   }
 }

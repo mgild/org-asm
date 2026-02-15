@@ -1,0 +1,35 @@
+// FlatBuffers schema for client-to-server commands.
+//
+// These are the messages the browser sends TO the server (upstream),
+// as opposed to the FlatBuffer frames the server broadcasts downstream.
+//
+// Generate code for both sides:
+//   flatc --rust -o server/src/generated/ schema/commands.fbs
+//   flatc --ts  -o src/generated/         schema/commands.fbs
+//
+// Design notes:
+// - Commands use a union so new command types can be added without
+//   breaking existing clients (FlatBuffers forward compatibility).
+// - CommandMessage wraps every command with an id for request/response
+//   correlation (e.g., server can ack with the same id).
+// - Subscribe depth defaults to 20 levels if not specified.
+
+namespace OrgAsm.Commands;
+
+table Subscribe {
+  symbol: string;
+  depth: uint16 = 20;
+}
+
+table Unsubscribe {
+  symbol: string;
+}
+
+union Command { Subscribe, Unsubscribe }
+
+table CommandMessage {
+  id: uint64;
+  command: Command;
+}
+
+root_type CommandMessage;

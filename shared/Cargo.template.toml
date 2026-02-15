@@ -1,0 +1,61 @@
+# ==============================================================================
+# Template Cargo.toml for Shared Domain Crate
+# ==============================================================================
+#
+# Shared types and validation used by BOTH the server engine (native Rust)
+# and the client engine (WASM). This is a plain Rust lib crate — no
+# wasm_bindgen, no platform-specific code.
+#
+# Usage:
+#   cp node_modules/org-asm/shared/Cargo.template.toml my-shared/Cargo.toml
+#   # Edit [package] name and add domain-specific dependencies
+#
+# Import from your server crate:
+#   [dependencies]
+#   my-shared = { path = "../my-shared" }
+#
+# Import from your WASM client crate:
+#   [dependencies]
+#   my-shared = { path = "../my-shared" }
+#
+# Both targets get the same types, constants, and validation logic.
+# Change once, both sides agree.
+
+[package]
+name = "my-shared"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# rlib only — this is a pure Rust library, not a WASM target.
+# It gets compiled into whatever target depends on it:
+#   - native x86_64 when server crate depends on it
+#   - wasm32-unknown-unknown when WASM client crate depends on it
+crate-type = ["rlib"]
+
+[dependencies]
+# Serialization support for domain types.
+# Used for JSON export in tests, REST endpoints, or debug logging.
+# The "derive" feature enables #[derive(Serialize, Deserialize)].
+serde = { version = "1", features = ["derive"] }
+
+# --- Optional dependencies ---
+# Uncomment as needed:
+
+# serde_json: Only if the shared crate itself needs to parse/emit JSON.
+# Usually the server or client crate handles JSON directly.
+# serde_json = "1"
+
+# thiserror: Ergonomic error types. Useful if shared validation
+# needs to return structured errors instead of bool.
+# thiserror = "2"
+
+[dev-dependencies]
+# For property-based testing of validation functions
+# proptest = "1"
+
+[profile.release]
+# Shared crate inherits the profile of whoever compiles it:
+#   - Server: opt-level 3 (speed)
+#   - WASM client: opt-level "z" (size)
+# No profile overrides needed here.

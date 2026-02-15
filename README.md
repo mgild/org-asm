@@ -15,8 +15,9 @@ Real-time web apps — data visualization, simulations, live dashboards, trading
 orgASM provides a complete MVC architecture for real-time WASM+React applications:
 
 - **Model** (Rust/WASM): Owns all state and computation. `tick()` serializes state into a FlatBuffer frame — JS reads it zero-copy from WASM linear memory. One WASM call per frame instead of N getter calls.
-- **View** (TypeScript): Applies frame data to DOM, canvas, and charts. Priority-ordered consumers handle data sync, visual effects, and React state updates at different rates.
-- **Controller** (TypeScript): Routes external data (WebSocket) and user input to the Model. Handles connection lifecycle and message parsing.
+- **View** (TypeScript + React hooks): Applies frame data to DOM, canvas, and charts. Priority-ordered consumers handle data sync, visual effects, and React state updates at different rates.
+- **Controller** (TypeScript): Routes external data (WebSocket) and user input to the Model. Handles connection lifecycle, message parsing, and bidirectional commands.
+- **Server** (Rust/Axum): Optional upstream engine that ingests exchange data and broadcasts FlatBuffer frames to all clients over binary WebSocket.
 
 At 60fps with 39 frame fields, the FlatBuffer protocol makes **60 boundary crossings/sec instead of 2,340**.
 
@@ -28,30 +29,32 @@ At 60fps with 39 frame fields, the FlatBuffer protocol makes **60 boundary cross
 │   Optional upstream data processor   │
 │   ServerEngine trait → ingest/tick   │
 │   FlatBuffer serialize → broadcast   │
+│   CommandHandler ← client commands   │
 └──────────────────┬───────────────────┘
                    │ Binary WebSocket (FlatBuffer bytes)
 ┌──────────────────▼───────────────────┐
 │          MODEL (Rust WASM)           │
 │  Engine struct owns ALL state        │
-│  tick(now_ms) → F (generic frame)    │
+│  tick(now_ms) → FlatBuffer frame     │
 │  ingest_frame(&[u8]) ← server bytes │
-│  One WASM call per frame             │
+│  Shared crate for domain types       │
 └──────────────────┬───────────────────┘
                    │ Frame (FlatBuffer)
 ┌──────────────────▼───────────────────┐
-│          VIEW (TypeScript)           │
+│          VIEW (TypeScript + React)   │
 │  AnimationLoop    → orchestrates     │
 │  EffectApplicator → DOM/CSS writes   │
 │  ChartDataConsumer → chart library   │
-│  ThrottledStateSync → React store    │
+│  useFrame()       → React hook       │
+│  useConnection()  → WS state hook    │
 └──────────────────┬───────────────────┘
-                   │ user events / data
+                   │ user events / commands
 ┌──────────────────▼───────────────────┐
 │       CONTROLLER (TypeScript)        │
 │  WebSocketPipeline → data ingestion  │
 │  BinaryFrameParser → binary frames   │
+│  CommandSender     → typed commands  │
 │  InputController   → user actions    │
-│  MessageParser     → data routing    │
 │  WasmBridge        → WASM lifecycle  │
 └──────────────────────────────────────┘
 ```
@@ -60,7 +63,7 @@ At 60fps with 39 frame fields, the FlatBuffer protocol makes **60 boundary cross
 
 ```
 60fps:  Engine.tick() → Canvas/DOM         (module-level, zero React)
-~10fps: ThrottledStateSync → Zustand       (React re-renders)
+~10fps: useFrame() / ThrottledStateSync    (React re-renders)
 ~1fps:  Config changes → Engine.set_*()    (user interaction)
 ```
 
@@ -72,9 +75,20 @@ These speeds never mix. 60fps data flows through the frame buffer and direct DOM
 npm install org-asm
 ```
 
-Peer dependencies: `zustand` (>=4), `rxjs` (>=7).
+Peer dependencies: `react` (>=18), `zustand` (>=4), `rxjs` (>=7). All optional.
 
 ## Quick Start
+
+### 0. Scaffold a Project (Recommended)
+
+```bash
+npx org-asm init my-app
+cd my-app
+npm install
+npx org-asm build
+```
+
+This generates a complete full-stack project with WASM engine, server engine, shared crate, React app, and build scripts. Skip to step 3 to start customizing.
 
 ### 1. Define Your Frame Schema
 
@@ -150,52 +164,46 @@ Build:
 wasm-pack build crates/my-engine --target web --release
 ```
 
-### 3. Wire the Animation Loop
+### 3. Wire with React Hooks
 
-```ts
-import {
-  AnimationLoop,
-  EffectApplicator,
-  ThrottledStateSync,
-  flatBufferTickAdapter,
-} from 'org-asm';
-import init, { Engine } from '../pkg/my_engine';
+```tsx
+import { useWasm, useAnimationLoop, useFrame, useConnection } from 'org-asm/react';
+import init, { Engine } from './pkg/my_engine';
 import { Frame } from './generated/frame';
 import { ByteBuffer } from 'flatbuffers';
 
-const wasm = await init();
-const engine = new Engine();
+function App() {
+  const { memory, ready } = useWasm(() => init());
+  const engine = useMemo(() => ready ? new Engine() : null, [ready]);
 
-// Zero-copy tick: reads FlatBuffer frame directly from WASM memory
-const tickSource = flatBufferTickAdapter(engine, wasm.memory,
-  bytes => Frame.getRootAsFrame(new ByteBuffer(bytes)));
-const loop = new AnimationLoop(tickSource);
+  const loop = useAnimationLoop(engine, memory,
+    bytes => Frame.getRootAsFrame(new ByteBuffer(bytes)));
 
-// Declarative DOM effects — type-safe extractors from the schema
-const effects = new EffectApplicator();
-effects
-  .bindCSSProperty('root', '--glow-alpha', f => f.intensity())
-  .bindTransform('container', f => f.intensity(), (v) => {
-    const x = (Math.random() - 0.5) * 2 * v;
-    const y = (Math.random() - 0.5) * 2 * v;
-    return `translate(${x}px, ${y}px)`;
+  // React re-renders at 10fps with the latest intensity
+  const intensity = useFrame(loop, f => f.intensity(), 100);
+
+  // Connection state
+  const { pipeline, connected } = useConnection({
+    url: 'wss://your-source/ws',
+    binaryType: 'arraybuffer',
   });
-effects.bind('root', document.getElementById('app')!);
 
-// Throttled React state bridge (100ms = ~10fps)
-const stateSync = new ThrottledStateSync(100);
-stateSync
-  .setActiveFlag(f => f.isActive())
-  .addMapping(
-    (intensity) => store.getState().update(intensity),
-    f => f.intensity(),
+  // Wire data source to engine
+  useEffect(() => {
+    if (!engine) return;
+    pipeline.onBinaryMessage(data => engine.ingest_frame(new Uint8Array(data)));
+  }, [pipeline, engine]);
+
+  return (
+    <div>
+      <div style={{ opacity: intensity ?? 0 }}>Value: {intensity?.toFixed(2)}</div>
+      <span>{connected ? 'Live' : 'Reconnecting...'}</span>
+    </div>
   );
-
-// Start — consumers run in priority order
-loop.addConsumer(effects);     // priority 10: DOM effects
-loop.addConsumer(stateSync);   // priority 20: React last
-loop.start();
+}
 ```
+
+5 lines to go from nothing to connected + rendering at 60fps.
 
 ### 4. Connect a Data Source
 
@@ -226,20 +234,20 @@ ws.onMessage((raw) => parser.parse(raw, engine, Date.now()));
 ws.connect();
 ```
 
-The raw WebSocket string goes straight to WASM. No `JSON.parse`, no JS object allocation, no field extraction in TypeScript.
-
 ### 5. Server Engine (Optional)
 
 For high-frequency data like orderbooks, run a server engine in native Rust that ingests exchange data and broadcasts FlatBuffer frames to all browser clients:
 
 ```bash
+npx org-asm init my-app   # includes server crate
+# or copy templates manually:
 cp node_modules/org-asm/server/engine-trait.rs my-server/src/engine_trait.rs
 cp node_modules/org-asm/server/broadcast.rs my-server/src/broadcast.rs
 cp node_modules/org-asm/server/main-template.rs my-server/src/main.rs
 cp node_modules/org-asm/server/Cargo.template.toml my-server/Cargo.toml
 ```
 
-Implement the `ServerEngine` trait for your exchange:
+Implement the `ServerEngine` trait:
 
 ```rust
 impl ServerEngine for OrderbookEngine {
@@ -256,56 +264,80 @@ impl ServerEngine for OrderbookEngine {
 }
 ```
 
-On the client, receive binary frames with `BinaryFrameParser`:
+### 6. Send Commands to the Server
+
+Use `CommandSender` for typed client-to-server messages (subscribe, unsubscribe, etc.):
 
 ```ts
-import { WebSocketPipeline, BinaryFrameParser } from 'org-asm';
+import { CommandSender } from 'org-asm/controller';
 
-const parser = new BinaryFrameParser(engine)
-  .onFrame(() => store.getState().update(engine.best_bid));
+const sender = new CommandSender(pipeline);
+sender.send((builder, id) => {
+  const sym = builder.createString('BTC-USD');
+  Subscribe.startSubscribe(builder);
+  Subscribe.addSymbol(builder, sym);
+  const sub = Subscribe.endSubscribe(builder);
 
-const ws = new WebSocketPipeline({
-  url: 'ws://localhost:9001/ws',
-  binaryType: 'arraybuffer',
+  CommandMessage.startCommandMessage(builder);
+  CommandMessage.addId(builder, id);
+  CommandMessage.addCommandType(builder, Command.Subscribe);
+  CommandMessage.addCommand(builder, sub);
+  return CommandMessage.endCommandMessage(builder);
 });
-ws.onBinaryMessage((data) => parser.ingestFrame(data));
-ws.connect();
 ```
 
-See `guides/server-engine-pattern.md` for the full architecture walkthrough.
+Define your command schema in `schema/commands.fbs` and generate code with `flatc`.
 
-### 6. Handle User Input
+### 7. Shared Rust Crate
 
-```ts
-import { InputController } from 'org-asm';
+Keep domain types, validation, and constants in a shared crate used by both server and WASM engines:
 
-const input = new InputController();
-input.onAction('interact', {
-  start: (params) => engine.open_action(params.mode, Date.now()),
-  end: () => engine.close_action(Date.now()),
-});
-input.onActionEnd((name, result) => {
-  console.log(`Action ${name} ended with result: ${result}`);
-});
-
-element.onmousedown = () => input.startAction('interact', { mode: 'draw' });
-const cleanup = input.bindGlobalRelease();
+```bash
+cp node_modules/org-asm/shared/lib-template.rs crates/shared/src/lib.rs
+cp node_modules/org-asm/shared/Cargo.template.toml crates/shared/Cargo.toml
 ```
+
+```rust
+// crates/shared/src/lib.rs
+pub enum Side { Bid, Ask }
+
+pub fn validate_price(price: f64) -> bool {
+    price > 0.0 && price.is_finite()
+}
+
+pub const MAX_DEPTH: usize = 25;
+```
+
+Both server and WASM crates import this:
+```toml
+[dependencies]
+my-shared = { path = "../shared" }
+```
+
+### 8. Build Everything
+
+```bash
+npx org-asm build
+```
+
+Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `cargo build --release` (server).
 
 ## API Reference
 
+### React Hooks (`org-asm/react`)
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useWasm(initFn)` | `{ memory, ready, error }` | Initialize WASM module, track loading state |
+| `useAnimationLoop(engine, memory, rootFn)` | `AnimationLoop \| null` | Create 60fps loop with FlatBuffer adapter |
+| `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
+| `useConnection(config)` | `{ pipeline, connected }` | WebSocket with connection state tracking |
+
 ### Core
 
-#### `FrameBufferFactory`
+#### `flatBufferTickAdapter(engine, memory, rootFn)`
 
-Creates type-safe offset maps from schema definitions. Validates no offset collisions.
-
-| Method | Description |
-|--------|-------------|
-| `createSchema(fields)` | Validates field descriptors, returns `FrameBufferSchema` |
-| `createOffsets<T>(schema)` | Returns frozen `Record<T, number>` for `frame[F.FIELD]` access |
-| `createAccessor<S>(frame, offsets)` | Wraps a `Float64Array` with `get()` / `getBool()` / `getU8()` |
-| `validate(frame, schema)` | Checks `frame.length >= schema.size` |
+Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. Plugs into `AnimationLoop`.
 
 #### Interfaces
 
@@ -316,10 +348,6 @@ Creates type-safe offset maps from schema definitions. Validates no offset colli
 | `IAnimationLoop` | `start()` / `stop()` / `addConsumer()` / `removeConsumer()` |
 | `IChartRenderer` | Extends `IFrameConsumer` with `setData()`, `setTimeWindow()`, `resize()`, `destroy()` |
 | `IEffectApplicator` | Extends `IFrameConsumer` with `bind()`, `unbind()`, `getCSSEffects()` |
-| `IDataPipeline` | `connect()` / `disconnect()` / `setParser()` |
-| `IMessageParser` | `parse(raw, engine, nowMs) -> DataResult` |
-| `IZeroCopyEngine` | Zero-alloc tick: `tick()` + `frame_ptr()` + `frame_len()` |
-| `IZeroCopyDataSource` | Zero-copy data access via pointers into WASM linear memory |
 | `IWasmIngestEngine` | WASM-side message parsing via `ingest_message()` |
 | `IWasmBinaryIngestEngine` | Binary frame ingestion via `ingest_frame()` for server engine pipeline |
 
@@ -345,37 +373,27 @@ Declarative frame-to-DOM bindings. Bind once at setup, applied every frame.
 
 Version-gated chart data sync. Only copies data from WASM when `data_version()` changes. Library-agnostic via `ChartDataSink` interface.
 
-#### `BatchedPathRenderer`
-
-Groups canvas line segments by quantized color for efficient rendering. Reduces GPU state flushes from ~500 to ~16-32 per frame.
-
 #### `ThrottledStateSync` (priority: 20)
 
 Bridges 60fps frame data to React at configurable intervals.
 
-| Method | Description |
-|--------|-------------|
-| `setActiveFlag(extract)` | Gate throttled updates on a boolean extractor |
-| `addMapping(handler, ...extractors)` | Throttled: fires at most once per interval |
-| `addConditionalMapping(flagExtract, handler)` | Immediate: fires every frame the flag is true |
-
 ### Controller
-
-#### `WasmBridge`
-
-Idempotent WASM initialization and engine factory.
 
 #### `WebSocketPipeline`
 
-Auto-reconnecting WebSocket with decoupled message handling.
+Auto-reconnecting WebSocket with binary + text message support, `send()` / `sendBinary()` for bidirectional communication.
 
 #### `WasmIngestParser`
 
-Delegates raw WebSocket strings to the Rust engine's `ingest_message()` — all parsing happens in WASM. Zero JS object allocation, one boundary crossing per message.
+Delegates raw WebSocket strings to the Rust engine's `ingest_message()` — all parsing happens in WASM.
 
 #### `BinaryFrameParser`
 
-Feeds binary FlatBuffer frames from a server engine to a WASM client engine via `ingest_frame()`. Wire into `WebSocketPipeline.onBinaryMessage()`.
+Feeds binary FlatBuffer frames from a server engine to a WASM client engine via `ingest_frame()`.
+
+#### `CommandSender`
+
+Sends typed FlatBuffer commands (subscribe, unsubscribe, etc.) to the server. Builder reuse, auto-incrementing IDs.
 
 #### `InputController`
 
@@ -385,8 +403,6 @@ Maps DOM events to engine actions with start/end lifecycle.
 
 #### `ServerEngine` trait
 
-Server-side engine that ingests exchange data and serializes state to FlatBuffer bytes for broadcast. See `server/engine-trait.rs`.
-
 | Method | Description |
 |--------|-------------|
 | `ingest(&mut self, msg: &[u8]) -> bool` | Process raw exchange message, return true if state changed |
@@ -395,100 +411,65 @@ Server-side engine that ingests exchange data and serializes state to FlatBuffer
 
 #### `BroadcastState`
 
-Fan-out binary frames to all WebSocket clients via `tokio::sync::broadcast`. Serialize once, all clients share the same `Arc<Vec<u8>>`.
+Fan-out binary frames to all WebSocket clients via `tokio::sync::broadcast`.
 
-### Model (Store)
+#### Command Handler
 
-#### `createThrottledStream<T>(throttleMs)`
+Template for processing client commands (subscribe/unsubscribe). See `server/command-handler-template.rs`.
 
-RxJS-backed throttled stream. Bridges high-frequency data to UI-safe rates.
+### CLI
 
-#### `createRealtimeStore<State>(initialState, actions)`
+| Command | Description |
+|---------|-------------|
+| `npx org-asm init <name>` | Scaffold full-stack project (WASM + server + shared + React) |
+| `npx org-asm build` | Run `flatc` + `wasm-pack` + `cargo build` pipeline |
 
-Zustand store with `subscribeWithSelector` middleware for fine-grained re-renders.
-
-#### `createModuleState<T>(initial)`
-
-Module-level mutable state for 60fps data that bypasses React entirely.
-
-## Frame Access Patterns
-
-Consumers use extractor functions that read values from the frame. Since the frame type is generic, extractors work with any representation — FlatBuffers, typed arrays, plain objects, etc.
-
-```ts
-// Bind DOM effects to frame fields
-effects.bindCSSProperty('root', '--value', f => f.intensity());
-effects.bindTransform('container', f => f.shakeIntensity(), v => `translate(${v}px, 0)`);
-
-// Sync to React state
-stateSync.addMapping(handler, f => f.score(), f => f.elapsed());
-stateSync.setActiveFlag(f => f.isActive());
-
-// Conditional mapping — fires immediately when flag is true
-stateSync.addConditionalMapping(f => f.sessionEnded(), frame => {
-  store.getState().endSession(frame.finalScore());
-});
-```
-
-### FlatBuffers Schema Types
+## FlatBuffers Schema Types
 
 | FlatBuffers Type | Rust Type | TypeScript Accessor |
 |------------------|-----------|---------------------|
 | `double` | `f64` | `frame.intensity()` |
 | `bool` | `bool` | `frame.isActive()` |
 | `ubyte` | `u8` | `frame.colorR()` |
-
-## Consumer Priority Order
-
-| Priority | Consumer | Rationale |
-|----------|----------|-----------|
-| 0 | `ChartDataConsumer` | Chart data is most latency-sensitive |
-| 10 | `EffectApplicator` | DOM effects are visual but not data-critical |
-| 20 | `ThrottledStateSync` | React updates are least latency-sensitive |
-
-If a frame budget is exceeded, higher-priority consumers still receive their data.
+| `struct` | inline struct | zero-copy, no vtable |
+| `[struct]` | `&[T]` | sequential cache-friendly access |
 
 ## Performance Design
 
 - **1 WASM call per frame** — `tick()` serializes state into a FlatBuffer, JS reads zero-copy
 - **Zero allocations in the render loop** — FlatBuffer bytes read directly from WASM linear memory
 - **Version-gated data copies** — chart data only copied when `data_version()` changes
-- **Throttled React updates** — 60fps data reaches React at ~10fps via `ThrottledStateSync`
+- **Throttled React updates** — 60fps data reaches React at ~10fps via `useFrame()` hook
 - **Batched canvas rendering** — color-quantized Path2D batching reduces GPU state changes 10-30x
-- **Precomputed CSS values** — engine computes CSS-ready numbers, JS applies them directly
+- **Shared Rust crate** — domain logic compiled once, used in both server (native) and client (WASM)
+- **FlatBuffer commands** — typed bidirectional communication, builder reuse eliminates allocation
 
 ## Dependencies
 
 | Dependency | Purpose |
 |------------|---------|
 | `flatbuffers` | FlatBuffers runtime for typed frame deserialization |
-| `zustand` (peer) | React state management with selector subscriptions |
-| `rxjs` (peer) | Throttled streams for high-frequency data bridging |
+| `react` (peer, optional) | React hooks for WASM + frame + connection state |
+| `zustand` (peer, optional) | React state management with selector subscriptions |
+| `rxjs` (peer, optional) | Throttled streams for high-frequency data bridging |
 | `wasm-bindgen` (Rust) | Rust-JS boundary bindings |
 
-Zero DOM library dependencies. Works with any chart library via `ChartDataSink`, any React version via Zustand.
-
-## Use Cases
-
-- Real-time data visualization dashboards
-- Trading and financial interfaces
-- Physics simulations and interactive models
-- Live sensor data monitoring
-- Audio/music visualizers
-- Game UIs with complex state
+Zero DOM library dependencies. Works with any chart library via `ChartDataSink`, any React version via hooks.
 
 ## Roadmap
 
-- [x] Generic frame type support (FlatBuffers, Float64Array, or custom)
 - [x] FlatBuffers integration with `flatc` codegen
 - [x] Server engine support (Rust/Axum with FlatBuffer broadcast)
 - [x] Binary WebSocket pipeline (`BinaryFrameParser` + `onBinaryMessage`)
-- [ ] CLI scaffolding tool (`npx org-asm init`)
-- [ ] Example apps (sensor dashboard, audio visualizer)
+- [x] React hooks (`useWasm`, `useAnimationLoop`, `useFrame`, `useConnection`)
+- [x] CLI scaffolding (`npx org-asm init`)
+- [x] Build tooling (`npx org-asm build`)
+- [x] Shared Rust crate template for server + WASM
+- [x] Bidirectional commands (`CommandSender` + `commands.fbs`)
+- [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Worker thread support for off-main-thread computation
 - [ ] SSE/EventSource pipeline alongside WebSocket
-- [ ] Benchmark suite comparing frame buffer vs N-getter patterns
-- [ ] React hooks package (`useEngine`, `useFrameValue`)
+- [ ] Benchmark suite
 
 ## License
 
