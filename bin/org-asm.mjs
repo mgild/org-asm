@@ -521,7 +521,7 @@ members = [
     "build": "npx org-asm build",
     "build:wasm": "wasm-pack build crates/engine --target web --release --out-dir ../../src/pkg",
     "build:schema": "flatc --ts -o src/generated/ schema/frame.fbs",
-    "dev": "vite",
+    "dev": "npm run build:wasm && vite",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -535,7 +535,9 @@ members = [
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
-    "@vitejs/plugin-react": "^4.0.0"
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite-plugin-wasm": "^3.4.0",
+    "vite-plugin-top-level-await": "^1.4.0"
   }
 }
 `,
@@ -1019,6 +1021,19 @@ async fn handle_client(socket: WebSocket, state: BroadcastState) {
 
     info!("Client disconnected");
 }
+`,
+
+    // ── Vite config ───────────────────────────────────────────────────────
+    'vite.config.ts': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { orgAsm } from 'org-asm/vite';
+
+export default defineConfig({
+  plugins: [
+    orgAsm({ server: { crate: 'server', port: 9001 } }),
+    react(),
+  ],
+});
 `,
 
     // ── React frontend ───────────────────────────────────────────────────
