@@ -1,15 +1,20 @@
 /**
- * WebSocketPipeline — Manages WebSocket connections with auto-reconnect,
- * exponential backoff, state machine, staleness tracking, backpressure,
- * and structured error surfacing.
+ * SSEPipeline — Manages Server-Sent Events connections with auto-reconnect,
+ * exponential backoff, state machine, staleness tracking, and structured
+ * error surfacing.
  *
- * The pipeline connects to a data source and routes raw messages to handlers.
- * It does NOT parse messages — that's the handler's job (separation of concerns).
+ * Implements the same IConnectionPipeline interface as WebSocketPipeline,
+ * making the transport swappable for read-only data streams.
  *
- * Pattern: WebSocket → raw string → handler(string) → engine methods
+ * Pattern: EventSource → raw string → handler(string) → engine methods
  *
- * This decouples the connection lifecycle from data processing.
- * The same pipeline works for any WebSocket data source.
+ * Key differences from WebSocket:
+ * - Read-only: send() is a no-op (Liskov substitutability)
+ * - Text-only: SSE doesn't support binary frames
+ * - No custom headers: EventSource API limitation (document to users)
+ * - Self-managed reconnect: We close and reconnect ourselves rather than
+ *   relying on EventSource's opaque built-in reconnect, for consistent
+ *   behavior with WebSocketPipeline's backoff/jitter strategy.
  */
 
 import { ConnectionState } from '../core/types';
@@ -22,34 +27,26 @@ import type {
   ErrorHandler,
 } from './connectionTypes';
 
-// Re-export for backward compatibility — consumers importing from WebSocketPipeline still work
-export { ConnectionState };
-export type { ConnectionError, MessageHandler, ConnectionHandler, StateChangeHandler, ErrorHandler };
-
-export interface WebSocketConfig {
-  /** WebSocket URL (ws:// or wss://) */
+export interface SSEConfig {
+  /** SSE endpoint URL */
   url: string;
+  /** Event types to listen for (default: ['message']) */
+  eventTypes?: string[];
+  /** Whether to send credentials with the request (default: false) */
+  withCredentials?: boolean;
   /** Base reconnect delay in ms (default: 1000). Backs off exponentially. */
   reconnectDelayMs?: number;
   /** Maximum reconnect delay in ms (default: 30000). Backoff caps here. */
   maxReconnectDelayMs?: number;
   /** Maximum reconnect attempts (default: Infinity) */
   maxReconnectAttempts?: number;
-  /** Protocols to pass to WebSocket constructor */
-  protocols?: string[];
-  /** Binary type for the WebSocket (default: 'blob'). Set to 'arraybuffer' for binary frame pipelines. */
-  binaryType?: BinaryType;
   /** Staleness threshold in ms (default: 5000). pipeline.stale becomes true when no message received within this window. */
   staleThresholdMs?: number;
-  /** Enable binary frame backpressure (default: false). When true, binary messages are coalesced via rAF (latest-wins). */
-  backpressure?: boolean;
 }
 
-export type BinaryMessageHandler = (data: ArrayBuffer) => void;
-
-export class WebSocketPipeline implements IConnectionPipeline {
-  private ws: WebSocket | null = null;
-  private config: Required<WebSocketConfig>;
+export class SSEPipeline implements IConnectionPipeline {
+  private es: EventSource | null = null;
+  private config: Required<SSEConfig>;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private intentionallyClosed = false;
@@ -58,26 +55,20 @@ export class WebSocketPipeline implements IConnectionPipeline {
 
   // Handlers
   private messageHandler: MessageHandler | null = null;
-  private binaryMessageHandler: BinaryMessageHandler | null = null;
   private connectHandler: ConnectionHandler | null = null;
   private disconnectHandler: ConnectionHandler | null = null;
   private stateChangeHandler: StateChangeHandler | null = null;
   private errorHandler: ErrorHandler | null = null;
 
-  // Backpressure state
-  private _latestBinaryFrame: ArrayBuffer | null = null;
-  private _rafId: number | null = null;
-
-  constructor(config: WebSocketConfig) {
+  constructor(config: SSEConfig) {
     this.config = {
       url: config.url,
+      eventTypes: config.eventTypes ?? ['message'],
+      withCredentials: config.withCredentials ?? false,
       reconnectDelayMs: config.reconnectDelayMs ?? 1000,
       maxReconnectDelayMs: config.maxReconnectDelayMs ?? 30000,
       maxReconnectAttempts: config.maxReconnectAttempts ?? Infinity,
-      protocols: config.protocols ?? [],
-      binaryType: config.binaryType ?? 'blob',
       staleThresholdMs: config.staleThresholdMs ?? 5000,
-      backpressure: config.backpressure ?? false,
     };
   }
 
@@ -85,37 +76,26 @@ export class WebSocketPipeline implements IConnectionPipeline {
   // Handler registration
   // ============================================
 
-  /** Set the handler for incoming text messages */
   onMessage(handler: MessageHandler): this {
     this.messageHandler = handler;
     return this;
   }
 
-  /** Set the handler for incoming binary messages (ArrayBuffer) */
-  onBinaryMessage(handler: BinaryMessageHandler): this {
-    this.binaryMessageHandler = handler;
-    return this;
-  }
-
-  /** Set the handler for connection open */
   onConnect(handler: ConnectionHandler): this {
     this.connectHandler = handler;
     return this;
   }
 
-  /** Set the handler for connection close */
   onDisconnect(handler: ConnectionHandler): this {
     this.disconnectHandler = handler;
     return this;
   }
 
-  /** Set the handler for state transitions */
   onStateChange(handler: StateChangeHandler): this {
     this.stateChangeHandler = handler;
     return this;
   }
 
-  /** Set the handler for connection errors */
   onError(handler: ErrorHandler): this {
     this.errorHandler = handler;
     return this;
@@ -125,28 +105,23 @@ export class WebSocketPipeline implements IConnectionPipeline {
   // Lifecycle
   // ============================================
 
-  /** Connect to the WebSocket server */
   connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.es?.readyState === EventSource.OPEN) return;
     this.intentionallyClosed = false;
     this.setState(ConnectionState.Connecting);
     this.createConnection();
   }
 
-  /** Disconnect and stop reconnecting */
   disconnect(): void {
     this.intentionallyClosed = true;
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
-    this.stopBackpressureLoop();
-    // Only close if OPEN to avoid "closed before connection established" error
-    // during React StrictMode unmount-remount cycles
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.close();
+    if (this.es) {
+      this.es.close();
+      this.es = null;
     }
-    this.ws = null;
     this.setState(ConnectionState.Disconnected);
   }
 
@@ -154,48 +129,36 @@ export class WebSocketPipeline implements IConnectionPipeline {
   // Getters
   // ============================================
 
-  /** Whether the WebSocket is currently connected (backward compat) */
   get connected(): boolean {
     return this._state === ConnectionState.Connected;
   }
 
-  /** Current connection state */
   get state(): ConnectionState {
     return this._state;
   }
 
-  /** Whether the connection is stale (no message within staleThresholdMs) */
   get stale(): boolean {
     if (this._lastMessageAt === 0) return false;
     return Date.now() - this._lastMessageAt > this.config.staleThresholdMs;
   }
 
-  /** Timestamp of last received message (0 if none) */
   get lastMessageTime(): number {
     return this._lastMessageAt;
   }
 
   // ============================================
-  // Send
+  // Send (no-op for SSE — read-only transport)
   // ============================================
 
-  /** Update the URL (takes effect on next connect/reconnect) */
   setUrl(url: string): void {
     this.config.url = url;
   }
 
-  /** Send a text message to the server */
-  send(data: string): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(data);
-    }
-  }
-
-  /** Send binary data to the server */
-  sendBinary(data: ArrayBuffer | Uint8Array): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(data);
-    }
+  /** No-op. SSE is a read-only transport. */
+  send(_data: string): void {
+    // Intentional no-op for Liskov substitutability.
+    // Callers needing bidirectional communication should type
+    // against WebSocketPipeline directly.
   }
 
   // ============================================
@@ -230,67 +193,36 @@ export class WebSocketPipeline implements IConnectionPipeline {
   }
 
   // ============================================
-  // Backpressure (opt-in rAF coalescing)
-  // ============================================
-
-  private startBackpressureLoop(): void {
-    if (this._rafId !== null) return;
-    const flush = () => {
-      if (this._latestBinaryFrame !== null) {
-        const frame = this._latestBinaryFrame;
-        this._latestBinaryFrame = null;
-        this.binaryMessageHandler?.(frame);
-      }
-      this._rafId = requestAnimationFrame(flush);
-    };
-    this._rafId = requestAnimationFrame(flush);
-  }
-
-  private stopBackpressureLoop(): void {
-    if (this._rafId !== null) {
-      cancelAnimationFrame(this._rafId);
-      this._rafId = null;
-    }
-    this._latestBinaryFrame = null;
-  }
-
-  // ============================================
   // Connection
   // ============================================
 
   private createConnection(): void {
-    const ws = new WebSocket(this.config.url, this.config.protocols);
-    ws.binaryType = this.config.binaryType;
-    this.ws = ws;
+    const es = new EventSource(this.config.url, {
+      withCredentials: this.config.withCredentials,
+    });
+    this.es = es;
 
-    ws.onopen = () => {
+    es.onopen = () => {
       this.reconnectAttempts = 0;
       this.setState(ConnectionState.Connected);
       this.connectHandler?.();
-      if (this.config.backpressure) {
-        this.startBackpressureLoop();
-      }
     };
 
-    ws.onmessage = (event) => {
-      this._lastMessageAt = Date.now();
-      if (event.data instanceof ArrayBuffer) {
-        if (this.config.backpressure) {
-          // Latest-wins coalescing: store frame, deliver on next rAF
-          this._latestBinaryFrame = event.data;
-        } else {
-          this.binaryMessageHandler?.(event.data);
-        }
-      } else {
-        // Text messages always pass through immediately
+    // Register listeners for each configured event type
+    for (const eventType of this.config.eventTypes) {
+      es.addEventListener(eventType, ((event: MessageEvent) => {
+        this._lastMessageAt = Date.now();
         this.messageHandler?.(event.data as string);
-      }
-    };
+      }) as EventListener);
+    }
 
-    ws.onclose = () => {
-      // Skip if this is an old ws that we intentionally abandoned (e.g., during StrictMode unmount)
-      if (this.ws !== ws) return;
-      this.stopBackpressureLoop();
+    es.onerror = () => {
+      // Skip if this is an old EventSource we intentionally abandoned
+      if (this.es !== es) return;
+
+      // Close to prevent EventSource's built-in reconnect —
+      // we manage reconnect ourselves for consistent backoff/jitter behavior
+      es.close();
       this.disconnectHandler?.();
 
       if (this.intentionallyClosed) {
@@ -298,7 +230,6 @@ export class WebSocketPipeline implements IConnectionPipeline {
         return;
       }
 
-      // Determine error type based on whether we ever connected
       if (this._state === ConnectionState.Connected || this._state === ConnectionState.Reconnecting) {
         this.emitError('connection_lost', `Connection lost (attempt ${this.reconnectAttempts})`);
       } else {
@@ -315,13 +246,6 @@ export class WebSocketPipeline implements IConnectionPipeline {
       } else {
         this.emitError('max_retries_exhausted', `Gave up after ${this.reconnectAttempts} attempts`);
         this.setState(ConnectionState.Disconnected);
-      }
-    };
-
-    ws.onerror = () => {
-      // Only close if this is still the current ws
-      if (this.ws === ws) {
-        ws.close();
       }
     };
   }

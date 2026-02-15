@@ -1,44 +1,54 @@
 /**
- * useConnection — Create a WebSocketPipeline and track connection state.
+ * useConnection — Create or adopt a connection pipeline and track connection state.
  *
- * Instantiates a WebSocketPipeline from the provided config, connects
- * on mount, and disconnects on cleanup. Exposes the pipeline instance
- * for attaching message handlers and the full connection state.
+ * Two calling conventions:
+ *   1. Config object (existing): creates a WebSocketPipeline internally.
+ *   2. Pipeline instance (new): adopts any IConnectionPipeline (SSEPipeline, etc.)
  *
- * Usage:
+ * Both paths expose the same result shape. The pipeline connects on mount
+ * and disconnects on cleanup.
+ *
+ * Usage (config — backward compatible):
  *   const { pipeline, connected, state, error, stale } = useConnection({
  *     url: 'wss://stream.example.com/ws',
- *     reconnectDelayMs: 1000,
  *   });
  *
- *   useEffect(() => {
- *     pipeline.onMessage(raw => engine.ingest_message(raw, Date.now()));
- *   }, [pipeline, engine]);
- *
- *   return <span>{connected ? 'Live' : stale ? 'Stale' : 'Reconnecting...'}</span>;
+ * Usage (pipeline instance):
+ *   const sse = useMemo(() => new SSEPipeline({ url: '/events' }), []);
+ *   const { pipeline, connected, state, error, stale } = useConnection(sse);
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { WebSocketPipeline, ConnectionState } from '../controller';
 import type { WebSocketConfig, ConnectionError } from '../controller';
+import type { IConnectionPipeline } from '../controller/connectionTypes';
 
 interface ConnectionResult {
-  pipeline: WebSocketPipeline;
+  pipeline: IConnectionPipeline;
   connected: boolean;
   state: ConnectionState;
   error: ConnectionError | null;
   stale: boolean;
 }
 
-export function useConnection(config: WebSocketConfig): ConnectionResult {
+/** Detect whether the argument is a pre-built pipeline or a config object */
+function isPipeline(arg: WebSocketConfig | IConnectionPipeline): arg is IConnectionPipeline {
+  return typeof (arg as IConnectionPipeline).connect === 'function';
+}
+
+export function useConnection(config: WebSocketConfig): ConnectionResult;
+export function useConnection(pipeline: IConnectionPipeline): ConnectionResult;
+export function useConnection(configOrPipeline: WebSocketConfig | IConnectionPipeline): ConnectionResult {
   const [state, setState] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [error, setError] = useState<ConnectionError | null>(null);
   const [stale, setStale] = useState(false);
-  const pipelineRef = useRef<WebSocketPipeline | null>(null);
+  const pipelineRef = useRef<IConnectionPipeline | null>(null);
 
-  // Lazily create the pipeline so the ref is stable across renders
+  // Lazily create or adopt the pipeline so the ref is stable across renders
   if (!pipelineRef.current) {
-    pipelineRef.current = new WebSocketPipeline(config);
+    pipelineRef.current = isPipeline(configOrPipeline)
+      ? configOrPipeline
+      : new WebSocketPipeline(configOrPipeline);
   }
 
   const pipeline = pipelineRef.current;
