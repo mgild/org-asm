@@ -36,6 +36,9 @@ switch (command) {
   case 'gen-builder':
     cmdGenBuilder(args.slice(1));
     break;
+  case 'gen-handler':
+    cmdGenHandler(args.slice(1));
+    break;
   default:
     console.error(red(`Unknown command: ${command}`));
     console.error(`Run ${cyan('npx org-asm --help')} for available commands.`);
@@ -55,11 +58,13 @@ ${bold('COMMANDS')}
   ${cyan('init')} ${dim('<project-name>')}          Scaffold a new org-asm project
   ${cyan('build')}                         Run the full build pipeline
   ${cyan('gen-builder')} ${dim('<schema.fbs>')}     Generate CommandBuilder from FlatBuffers schema
+  ${cyan('gen-handler')} ${dim('<schema.fbs>')}     Generate Rust CommandHandler trait from FlatBuffers schema
 
 ${bold('EXAMPLES')}
   npx org-asm init my-app
   cd my-app && npx org-asm build
   npx org-asm gen-builder schema/commands.fbs -o src/generated/
+  npx org-asm gen-handler schema/commands.fbs -o server/src/generated/
 `);
 }
 
@@ -400,6 +405,95 @@ ${bold('EXAMPLES')}
     }
   }
 
+  console.log('');
+}
+
+// ─── Gen-handler command ─────────────────────────────────────────────────────
+
+async function cmdGenHandler(ghArgs) {
+  if (ghArgs.includes('--help') || ghArgs.includes('-h')) {
+    console.log(`
+${bold('org-asm gen-handler')} ${dim('<schema.fbs>')}
+
+Generate a Rust CommandHandler trait + dispatch function from a FlatBuffers schema.
+Requires a schema with a union-based root type.
+
+${bold('OPTIONS')}
+  ${cyan('<schema.fbs>')}             Path to FlatBuffers schema file (required)
+  ${cyan('-o <outDir>')}              Output directory (default: server/src/generated/)
+  ${cyan('--name <TraitName>')}       Generated trait name (default: {UnionName}Handler)
+  ${cyan('--crate-path <path>')}      Rust import path (default: crate::generated::{namespace}::*)
+
+${bold('EXAMPLES')}
+  npx org-asm gen-handler schema/commands.fbs
+  npx org-asm gen-handler schema/commands.fbs -o server/src/generated/ --name CommandHandler
+`);
+    process.exit(0);
+  }
+
+  // Parse args
+  let schemaPath = null;
+  let outDir = 'server/src/generated/';
+  let traitName = null;
+  let cratePath = null;
+
+  for (let i = 0; i < ghArgs.length; i++) {
+    const arg = ghArgs[i];
+    if (arg === '-o' && i + 1 < ghArgs.length) {
+      outDir = ghArgs[++i];
+    } else if (arg === '--name' && i + 1 < ghArgs.length) {
+      traitName = ghArgs[++i];
+    } else if (arg === '--crate-path' && i + 1 < ghArgs.length) {
+      cratePath = ghArgs[++i];
+    } else if (!arg.startsWith('-')) {
+      schemaPath = arg;
+    }
+  }
+
+  if (!schemaPath) {
+    console.error(red('Error: schema file path is required.'));
+    console.error(`Usage: ${cyan('npx org-asm gen-handler <schema.fbs>')}`);
+    process.exit(1);
+  }
+
+  const resolvedSchema = resolve(schemaPath);
+  if (!existsSync(resolvedSchema)) {
+    console.error(red(`Error: schema file not found: ${schemaPath}`));
+    process.exit(1);
+  }
+
+  // Import the codegen module
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const codegenPath = join(__dirname, '..', 'codegen', 'generate-builder.mjs');
+  const { parseFbs, canGenerateRustHandler, generateRustHandler } = await import(codegenPath);
+
+  // Parse schema
+  const source = readFileSync(resolvedSchema, 'utf-8');
+  const schema = parseFbs(source);
+
+  if (!canGenerateRustHandler(schema)) {
+    console.error(red('Error: schema has no union-based root type. gen-handler requires a union root (e.g. commands.fbs).'));
+    process.exit(1);
+  }
+
+  const options = {};
+  if (traitName) options.traitName = traitName;
+  if (cratePath) options.cratePath = cratePath;
+
+  const rustOutput = generateRustHandler(schema, options);
+
+  // Output file: {snake_schema_name}_handler.rs
+  const base = basename(schemaPath, '.fbs');
+  const snakeBase = base.replace(/[-]/g, '_');
+  const resolvedOutDir = resolve(outDir);
+  mkdirSync(resolvedOutDir, { recursive: true });
+  const handlerFile = join(resolvedOutDir, `${snakeBase}_handler.rs`);
+  writeFileSync(handlerFile, rustOutput, 'utf-8');
+
+  console.log(`\n${green(bold('Generated'))} ${cyan(handlerFile)}`);
+  console.log(`  ${dim('Trait:')} ${traitName || schema.unions[0].name + 'Handler'}`);
+  console.log(`  ${dim('Members:')} ${schema.unions.map((u) => u.members.join(', ')).join('; ')}`);
   console.log('');
 }
 

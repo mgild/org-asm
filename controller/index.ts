@@ -31,3 +31,4 @@ export type { ActionHandlers, ActionEndCallback } from './InputController';
 export { MessageParser, WasmIngestParser, BinaryFrameParser } from './MessageParser';
 export type { EngineDataTarget } from './MessageParser';
 export { CommandBuilder, CommandSender } from './CommandSender';
+export { ResponseRegistry } from './ResponseRegistry';

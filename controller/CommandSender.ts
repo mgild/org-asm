@@ -38,6 +38,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 import type { WebSocketPipeline } from './WebSocketPipeline';
+import type { ResponseRegistry } from './ResponseRegistry';
 
 /**
  * Base class wrapping a FlatBuffers builder with reusable ID tracking.
@@ -76,25 +77,18 @@ export class CommandSender<B extends CommandBuilder = CommandBuilder> {
   protected pipeline: WebSocketPipeline;
   protected builder: B;
   private nextId: bigint = 0n;
+  protected responseRegistry: ResponseRegistry | null = null;
 
-  /**
-   * @param pipeline - The pipeline to send binary commands through.
-   * @param builder - Your CommandBuilder subclass instance (reused across calls).
-   */
   constructor(pipeline: WebSocketPipeline, builder: B) {
     this.pipeline = pipeline;
     this.builder = builder;
   }
 
-  /**
-   * Build and send a FlatBuffer command over the pipeline.
-   *
-   * Resets the builder, sets the id, calls your build function,
-   * then finishes and sends the bytes.
-   *
-   * @param buildFn - Receives the typed builder, returns the root table offset.
-   * @returns The command id assigned (for correlation with server responses).
-   */
+  /** Attach a ResponseRegistry for sendWithResponse support. */
+  setResponseRegistry(registry: ResponseRegistry): void {
+    this.responseRegistry = registry;
+  }
+
   protected send(buildFn: (builder: B) => flatbuffers.Offset): bigint {
     const id = this.nextId;
     this.nextId += 1n;
@@ -109,9 +103,17 @@ export class CommandSender<B extends CommandBuilder = CommandBuilder> {
   }
 
   /**
-   * The next command id that will be assigned.
-   * Useful for pre-registering response handlers before sending.
+   * Build, send, and await a response for a FlatBuffer command.
+   * Requires a ResponseRegistry to be set via setResponseRegistry().
    */
+  protected sendWithResponse(buildFn: (builder: B) => flatbuffers.Offset): Promise<ArrayBuffer> {
+    if (!this.responseRegistry) {
+      throw new Error('CommandSender: sendWithResponse requires a ResponseRegistry. Call setResponseRegistry() first.');
+    }
+    const id = this.send(buildFn);
+    return this.responseRegistry.register(id);
+  }
+
   get peekNextId(): bigint {
     return this.nextId;
   }

@@ -275,7 +275,7 @@ npx org-asm gen-builder schema/commands.fbs -o src/generated/
 
 For schemas with a union-based root type (like `commands.fbs`), this produces three files:
 - `CommandsBuilder.ts` — fluent builder helpers (all schemas)
-- `CommandsSender.ts` — typed `CommandSender` subclass with one method per union member
+- `CommandsSender.ts` — typed `CommandSender` subclass with sync + async methods per union member
 - `useCommands.ts` — React hook returning the sender
 
 Use the generated hook directly — no manual subclass needed:
@@ -287,14 +287,87 @@ import { useCommands } from './generated/useCommands';
 const { pipeline } = useConnection({ url: 'wss://...' });
 const commands = useCommands(pipeline);
 
+// Fire-and-forget (returns command ID)
 commands.subscribe({ symbol: 'BTC-USD', depth: 20 });
 commands.unsubscribe({ symbol: 'BTC-USD' });
 commands.requestSnapshot();
+
+// Await server response (returns ArrayBuffer)
+const response = await commands.subscribeAsync({ symbol: 'BTC-USD' });
 ```
 
-Fields with schema defaults (e.g. `depth: uint16 = 20`) become optional in the generated args.
+Fields with schema defaults (e.g. `depth: uint16 = 20`) become optional in the generated args. Every method has both a sync variant (returns `bigint` command ID) and an `Async` variant (returns `Promise<ArrayBuffer>`).
 
 Use `--no-sender` to skip sender+hook generation, or `--no-hook` to skip just the hook.
+
+### 6b. Await Command Responses
+
+The `Async` variants require a `ResponseRegistry` to correlate responses by command ID:
+
+```ts
+import { ResponseRegistry } from 'org-asm/controller';
+import { useCommands } from './generated/useCommands';
+
+// Create a registry with an ID extractor for your response schema
+const registry = new ResponseRegistry(
+  (data) => {
+    const msg = ResponseMessage.getRootAsResponseMessage(
+      new ByteBuffer(new Uint8Array(data)),
+    );
+    return msg.id(); // must return bigint | null
+  },
+  5000, // timeout in ms (default 5000)
+);
+
+// Wire as interceptor: responses are consumed, frames pass through
+pipeline.onBinaryMessage((data) => {
+  if (!registry.handleMessage(data)) {
+    parser.ingestFrame(data); // not a response → normal frame
+  }
+});
+pipeline.onDisconnect(() => registry.rejectAll('Connection lost'));
+
+// Pass registry to the hook (or sender constructor)
+const commands = useCommands(pipeline, registry);
+const response = await commands.subscribeAsync({ symbol: 'ETH-USD' });
+```
+
+### 6c. Server-Side Command Handler (Rust)
+
+Generate a Rust trait + dispatch function from your command schema:
+
+```bash
+npx org-asm gen-handler schema/commands.fbs -o server/src/generated/
+```
+
+This produces `commands_handler.rs` with a `CommandHandler` trait and `dispatch_command` function:
+
+```rust
+pub trait CommandHandler {
+    fn handle_subscribe(&mut self, id: u64, symbol: &str, depth: u16) -> Option<Vec<u8>>;
+    fn handle_unsubscribe(&mut self, id: u64, symbol: &str) -> Option<Vec<u8>>;
+    fn handle_request_snapshot(&mut self, id: u64) -> Option<Vec<u8>>;
+}
+```
+
+Implement the trait on your server engine:
+
+```rust
+impl CommandHandler for MyEngine {
+    fn handle_subscribe(&mut self, id: u64, symbol: &str, depth: u16) -> Option<Vec<u8>> {
+        self.subscriptions.insert(symbol.to_string(), depth);
+        Some(build_ack(id)) // return response bytes, or None
+    }
+    // ...
+}
+
+// In your WebSocket handler:
+if let Some(response) = dispatch_command(bytes, &mut engine) {
+    ws_tx.send(Message::Binary(response.into())).await?;
+}
+```
+
+Options: `--name <TraitName>` (default `{UnionName}Handler`), `--crate-path <path>` (default `crate::generated::{namespace}::*`).
 
 ### 7. Shared Rust Crate
 
@@ -413,9 +486,21 @@ Delegates raw WebSocket strings to the Rust engine's `ingest_message()` — all 
 
 Feeds binary FlatBuffer frames from a server engine to a WASM client engine via `ingest_frame()`.
 
+#### `ResponseRegistry`
+
+Correlates command responses by ID. Standalone class — no dependency on `CommandSender`.
+
+| Method | Description |
+|--------|-------------|
+| `constructor(extractId, timeoutMs?)` | Create registry with ID extractor function and optional timeout (default 5000ms) |
+| `register(id: bigint)` | Create pending promise for a command ID, rejects on timeout |
+| `handleMessage(data: ArrayBuffer)` | Match incoming message as response, returns `true` if consumed |
+| `rejectAll(reason: string)` | Reject all pending promises (call on disconnect) |
+| `pendingCount` | Number of in-flight requests |
+
 #### `CommandBuilder` / `CommandSender<B>`
 
-Two-class pattern for typed commands. Extend `CommandBuilder` with instance methods wrapping generated FlatBuffer statics (`b.startX()` instead of `X.startX(builder)`). Extend `CommandSender<B>` with typed command methods. Builder reuse, auto-incrementing IDs.
+Two-class pattern for typed commands. Extend `CommandBuilder` with instance methods wrapping generated FlatBuffer statics (`b.startX()` instead of `X.startX(builder)`). Extend `CommandSender<B>` with typed command methods. Builder reuse, auto-incrementing IDs. Supports `sendWithResponse()` for async request/response via `ResponseRegistry`.
 
 #### `SSEPipeline`
 
@@ -500,6 +585,7 @@ Template for processing client commands (subscribe/unsubscribe). See `server/com
 | `npx org-asm init <name>` | Scaffold full-stack project (WASM + server + shared + React) |
 | `npx org-asm build` | Run `flatc` + `wasm-pack` + `cargo build` pipeline |
 | `npx org-asm gen-builder <schema.fbs>` | Generate builder + sender + hook from FlatBuffers schema (sender/hook for union schemas only) |
+| `npx org-asm gen-handler <schema.fbs>` | Generate Rust `CommandHandler` trait + dispatch from FlatBuffers schema (requires union root) |
 
 ## FlatBuffers Schema Types
 
@@ -548,6 +634,8 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] `RequestSnapshot` command for gap-free reconnection
 - [x] Worker thread support for off-main-thread computation (`WorkerBridge` + `SharedBufferTickSource` + `useWorker`)
 - [x] SSE/EventSource pipeline alongside WebSocket (`SSEPipeline` + `IConnectionPipeline`)
+- [x] Response correlation (`ResponseRegistry` + async command variants)
+- [x] Server-side Rust codegen (`gen-handler` — trait + dispatch from `.fbs`)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Benchmark suite
 
