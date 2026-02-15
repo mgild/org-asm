@@ -222,6 +222,7 @@ User starts analysis --> Controller: engine.analyze(data, emit)
 on-demand:  useWasmCall() / useWasmState()       (user actions, events)
 async:      useAsyncWasmCall()                   (worker offload, fetch)
 streaming:  useWasmStream()                      (large dataset processing)
+reducer:    useWasmReducer()                     (forms, CRUD, state machines)
 ~1fps:      Config changes → Engine.set_*()      (user settings)
 ```
 
@@ -234,6 +235,8 @@ streaming:  useWasmStream()                      (large dataset processing)
 **Minimal WASM boundary crossings**: For real-time paths, 1 `tick()` call per frame returns all state via FlatBuffer. For on-demand paths, direct method calls return results immediately.
 
 **No shared mutable state**: The Model (Rust) owns all data. JS never mutates engine state directly — it calls methods that the engine controls.
+
+**Works beyond 60fps** — The same Rust-first principle applies to forms, dashboards, and CRUD apps. `useWasmReducer` gives React's reducer pattern with Rust owning all state and transitions. `createWasmContext` shares the engine across components without prop drilling. Not every app needs an animation loop.
 
 **Testable**: The Model is pure Rust — test with `cargo test`, no browser needed. Test the View by feeding it synthetic frame buffers. Test the Controller by mocking WebSocket connections.
 

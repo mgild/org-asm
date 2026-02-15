@@ -462,6 +462,8 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useWasmState(notifier, getSnapshot)` | `T` | Reactive WASM state via `useSyncExternalStore` — re-reads on `notify()` |
 | `useAsyncWasmCall(fn, deps)` | `{ result, loading, error }` | Async WASM call with cancellation (wasm-bindgen-futures or worker offload) |
 | `useWasmStream(fn, deps)` | `{ chunks, done, error }` | Streaming chunked results from WASM with rAF-batched updates |
+| `useWasmReducer(engine, config)` | `[S, dispatch]` | Rust-first state management — engine owns state, dispatch triggers mutation + re-render |
+| `createWasmContext<E>()` | `{ WasmProvider, useEngine, useNotifier }` | Factory for sharing engine + notifier across component tree without prop drilling |
 | `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
 | `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
 | `useResponseRegistry(pipeline, extractId, options?)` | `ResponseRegistry<R> \| null` | Wire response correlation as binary middleware + disconnect cleanup |
@@ -705,6 +707,7 @@ Template for processing client commands (subscribe/unsubscribe). See `server/com
 - **Minimal boundary crossings** — FlatBuffer frames batch all state into one WASM→JS call. On-demand methods return results directly.
 - **Zero allocations in hot paths** — FlatBuffer bytes read directly from WASM linear memory, pre-allocated buffers reused per frame
 - **Throttled React updates** — 60fps data reaches React at ~10fps via `useFrame()` hook. Real-time paths bypass React entirely.
+- **Non-animation paths** — On-demand validation via `useWasmCall`, reactive state via `useWasmState`, async computation via `useAsyncWasmCall`, reducer pattern via `useWasmReducer`. Not everything needs 60fps.
 - **FlatBuffer commands** — typed bidirectional communication, builder reuse eliminates allocation
 - **Composable binary middleware** — `pipeline.use()` chain with zero-copy pass-through, no handler conflicts
 
@@ -745,6 +748,7 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] Multi-engine shared animation loop (`MultiAnimationLoop` + `useEngine`)
 - [x] On-demand WASM hooks (`useWasmCall`, `useWasmState`, `useAsyncWasmCall`, `useWasmStream`)
 - [x] Task worker for one-off computation (`WasmTaskWorker` + `task-worker-entry`)
+- [x] Shared engine context (`createWasmContext`) and reducer pattern (`useWasmReducer`)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Benchmark suite
 

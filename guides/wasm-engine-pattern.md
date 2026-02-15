@@ -217,7 +217,41 @@ Chunks are batched via `requestAnimationFrame` to avoid excessive re-renders.
 | `useWasmState(notifier, snap)` | Explicit notify | Sync | Balance, counts, externally-mutated state |
 | `useAsyncWasmCall(fn, deps)` | React deps change | Async | Fetch-in-WASM, worker offload |
 | `useWasmStream(fn, deps)` | React deps change | Streaming | Large dataset processing, progress |
+| `useWasmReducer(engine, config)` | Dispatch action | Sync/Async | CRUD apps, forms, state machines |
 | `useFrame(loop, extract, ms)` | Animation tick | Sync (60fps) | CSS effects, animations, real-time charts |
+
+### Reducer Pattern (`useWasmReducer`)
+For non-animation apps (forms, dashboards, CRUD), the engine owns all state and the reducer pattern replaces React's `useReducer`:
+
+```ts
+const [state, dispatch] = useWasmReducer(engine, {
+  getSnapshot: (e) => ({ items: e.get_items(), total: e.total() }),
+  dispatch: (e, action) => {
+    if (action.type === 'add') e.add_item(action.name, action.price);
+    if (action.type === 'remove') e.remove_item(action.id);
+  },
+});
+dispatch({ type: 'add', name: 'Widget', price: 9.99 });
+```
+
+All transition logic lives in Rust. TypeScript dispatches actions and renders snapshots.
+
+### Shared Engine Context (`createWasmContext`)
+Share an engine + notifier across a component tree without prop drilling:
+
+```ts
+// context.ts
+export const { WasmProvider, useEngine, useNotifier } = createWasmContext<MyEngine>();
+
+// App.tsx
+<WasmProvider engine={engine} notifier={notifier}>
+  <Dashboard />
+</WasmProvider>
+
+// Any descendant
+const engine = useEngine();
+const balance = useWasmState(useNotifier(), () => engine.balance());
+```
 
 ## Anti-Patterns to Avoid
 1. **Individual WASM calls per value** -- Each getter/setter crosses the boundary. Use the frame buffer instead.
