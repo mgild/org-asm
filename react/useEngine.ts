@@ -1,28 +1,29 @@
 /**
- * useEngine — Register an engine on a shared MultiAnimationLoop.
+ * useEngine — Register an engine on a MultiAnimationLoop.
  *
  * Two calling conventions:
  *
  *   1. Raw tick source (any { tick(nowMs): F }):
- *      const handle = useEngine(sharedLoop, myTickSource);
+ *      const handle = useEngine(loop, myTickSource);
  *
  *   2. FlatBuffer WASM engine (mirrors useAnimationLoop):
- *      const handle = useEngine(sharedLoop, engine, memory, rootFn);
+ *      const handle = useEngine(loop, engine, memory, rootFn);
  *
  * Returns an EngineHandle<F> that works as a drop-in for AnimationLoop
  * with useFrame() and other consumer hooks. The engine is removed from
  * the shared loop on unmount.
  *
- * Usage:
- *   const sharedLoop = useMultiAnimationLoop();
+ * The loop is created externally — pass the same instance to multiple
+ * useEngine calls to share a single requestAnimationFrame:
  *
- *   // FlatBuffer engine — no manual adapter needed
- *   const obHandle = useEngine(sharedLoop, obEngine, obMemory, parseOb);
- *   const bid = useFrame(obHandle, f => f.bestBid());
+ *   // Create once, share everywhere
+ *   const loop = useMemo(() => new MultiAnimationLoop(), []);
  *
- *   // Raw tick source
- *   const chartHandle = useEngine(sharedLoop, chartTickSource);
- *   const price = useFrame(chartHandle, f => f.price());
+ *   // Or create at module scope / in context
+ *   const loop = useContext(AnimationLoopContext);
+ *
+ *   const obHandle = useEngine(loop, obEngine, obMemory, parseOb);
+ *   const chartHandle = useEngine(loop, chartEngine, chartMemory, parseChart);
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -76,6 +77,7 @@ export function useEngine<F>(
     if (!tickSource) return;
 
     const h = loop.addEngine(tickSource);
+    loop.start();
     setHandle(h);
 
     return () => {
