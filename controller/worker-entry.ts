@@ -106,18 +106,18 @@ self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
 
         // ---- CUSTOMIZE: Call your engine's tick ----
         // Float64Array mode:
-        //   (engine as any).tick(nowMs);
-        //   const ptr = (engine as any).frame_ptr();
-        //   const len = (engine as any).frame_len();
+        //   (engine as Record<string, Function>).tick(nowMs);
+        //   const ptr = (engine as Record<string, Function>).frame_ptr();
+        //   const len = (engine as Record<string, Function>).frame_len();
         //   // Copy frame data from WASM memory to SAB
         //   // (WASM linear memory can't be a SharedArrayBuffer)
         //   const wasmView = new Float64Array(wasmMemory.buffer, ptr, frameSize);
         //   frameView!.set(wasmView);
         //
         // FlatBuffer mode:
-        //   (engine as any).tick(nowMs);
-        //   const ptr = (engine as any).frame_ptr();
-        //   const len = (engine as any).frame_len();
+        //   (engine as Record<string, Function>).tick(nowMs);
+        //   const ptr = (engine as Record<string, Function>).frame_ptr();
+        //   const len = (engine as Record<string, Function>).frame_len();
         //   const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
         //   const dataView = new Uint8Array(buffer!, 20, len);
         //   dataView.set(bytes);
@@ -144,25 +144,25 @@ self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
 
     case 'input': {
       // ---- CUSTOMIZE: Route to your engine's action methods ----
-      // Example: (engine as any).openAction(msg.action, JSON.stringify(msg.params), Date.now());
+      // Example: (engine as Record<string, Function>).openAction(msg.action, JSON.stringify(msg.params), Date.now());
       break;
     }
 
     case 'data': {
       // ---- CUSTOMIZE: Route to your engine's ingest method ----
-      // Example: (engine as any).ingest_message(msg.payload, Date.now());
+      // Example: (engine as Record<string, Function>).ingest_message(msg.payload, Date.now());
       break;
     }
 
     case 'binary-data': {
       // ---- CUSTOMIZE: Route to your engine's binary ingest ----
-      // Example: (engine as any).ingest_frame(new Uint8Array(msg.payload));
+      // Example: (engine as Record<string, Function>).ingest_frame(new Uint8Array(msg.payload));
       break;
     }
 
     case 'configure': {
       // ---- CUSTOMIZE: Route to your engine's configure method ----
-      // Example: (engine as any).configure(msg.key, msg.value);
+      // Example: (engine as Record<string, Function>).configure(msg.key, msg.value);
       break;
     }
   }
