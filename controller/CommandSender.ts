@@ -1,53 +1,58 @@
 /**
- * CommandSender — Sends binary FlatBuffer commands over a WebSocketPipeline.
+ * CommandBuilder + CommandSender — Typed FlatBuffer commands over WebSocket.
  *
- * Encapsulates the FlatBuffer builder lifecycle: reset, build, finish, send.
- * The builder is reused across calls to avoid repeated allocation (same pattern
- * as the Rust engine's FlatBufferBuilder reuse in tick()).
- *
- * Each command gets a monotonically increasing id for request/response correlation.
- * The server can echo the id back in acknowledgements so the client knows which
- * command was processed.
+ * Two-class pattern:
+ * 1. Extend `CommandBuilder` with instance methods wrapping your generated FlatBuffer statics
+ * 2. Extend `CommandSender<YourBuilder>` with typed command methods
  *
  * ## Usage
  *
  * ```typescript
- * import * as flatbuffers from 'flatbuffers';
- * import { CommandSender } from 'org-asm/controller';
+ * import { CommandBuilder, CommandSender } from 'org-asm/controller';
  * import { CommandMessage } from './generated/org-asm/commands/command-message';
  * import { Subscribe } from './generated/org-asm/commands/subscribe';
  * import { Command } from './generated/org-asm/commands/command';
  *
- * const sender = new CommandSender(pipeline);
+ * // 1. Wrap generated statics as instance methods
+ * class MyBuilder extends CommandBuilder {
+ *   startSubscribe()                          { Subscribe.startSubscribe(this.fb); }
+ *   addSymbol(o: flatbuffers.Offset)          { Subscribe.addSymbol(this.fb, o); }
+ *   addDepth(d: number)                       { Subscribe.addDepth(this.fb, d); }
+ *   endSubscribe()                            { return Subscribe.endSubscribe(this.fb); }
  *
- * // Send a Subscribe command
- * sender.send((builder, id) => {
- *   const symbolOffset = builder.createString('BTC-USD');
- *   Subscribe.startSubscribe(builder);
- *   Subscribe.addSymbol(builder, symbolOffset);
- *   Subscribe.addDepth(builder, 20);
- *   const subOffset = Subscribe.endSubscribe(builder);
+ *   startCommandMessage()                     { CommandMessage.startCommandMessage(this.fb); }
+ *   addId()                                   { CommandMessage.addId(this.fb, this.id); }
+ *   addCommandType(t: Command)                { CommandMessage.addCommandType(this.fb, t); }
+ *   addCommand(o: flatbuffers.Offset)         { CommandMessage.addCommand(this.fb, o); }
+ *   endCommandMessage()                       { return CommandMessage.endCommandMessage(this.fb); }
+ * }
  *
- *   CommandMessage.startCommandMessage(builder);
- *   CommandMessage.addId(builder, id);
- *   CommandMessage.addCommandType(builder, Command.Subscribe);
- *   CommandMessage.addCommand(builder, subOffset);
- *   return CommandMessage.endCommandMessage(builder);
- * });
+ * // 2. Typed command methods
+ * class MyCommands extends CommandSender<MyBuilder> {
+ *   constructor(pipeline: WebSocketPipeline) {
+ *     super(pipeline, new MyBuilder());
+ *   }
  *
- * // Send an Unsubscribe command
- * sender.send((builder, id) => {
- *   const symbolOffset = builder.createString('BTC-USD');
- *   Unsubscribe.startUnsubscribe(builder);
- *   Unsubscribe.addSymbol(builder, symbolOffset);
- *   const unsubOffset = Unsubscribe.endUnsubscribe(builder);
+ *   subscribe(symbol: string, depth = 20): bigint {
+ *     return this.send(b => {
+ *       const sym = b.createString(symbol);
+ *       b.startSubscribe();
+ *       b.addSymbol(sym);
+ *       b.addDepth(depth);
+ *       const sub = b.endSubscribe();
  *
- *   CommandMessage.startCommandMessage(builder);
- *   CommandMessage.addId(builder, id);
- *   CommandMessage.addCommandType(builder, Command.Unsubscribe);
- *   CommandMessage.addCommand(builder, unsubOffset);
- *   return CommandMessage.endCommandMessage(builder);
- * });
+ *       b.startCommandMessage();
+ *       b.addId();
+ *       b.addCommandType(Command.Subscribe);
+ *       b.addCommand(sub);
+ *       return b.endCommandMessage();
+ *     });
+ *   }
+ * }
+ *
+ * // Clean typed API:
+ * const commands = new MyCommands(pipeline);
+ * commands.subscribe('BTC-USD', 20);
  * ```
  */
 
@@ -55,61 +60,71 @@ import * as flatbuffers from 'flatbuffers';
 import type { WebSocketPipeline } from './WebSocketPipeline';
 
 /**
- * Function that builds a FlatBuffer command message.
+ * Base class wrapping a FlatBuffers builder with reusable ID tracking.
  *
- * Receives the builder (already reset) and the auto-incremented command id.
- * Must create the CommandMessage table and return its offset.
- * The caller (CommandSender) handles `builder.finish()` and sending.
- *
- * @param builder - The FlatBufferBuilder to use (already reset, ready for building)
- * @param id - Auto-incremented command id (bigint for uint64 compatibility)
- * @returns The offset of the finished CommandMessage table
+ * Extend with instance methods that delegate to your generated FlatBuffer statics.
+ * This turns `Subscribe.startSubscribe(builder)` into `b.startSubscribe()`.
  */
-export type CommandBuildFn = (
-  builder: flatbuffers.Builder,
-  id: bigint,
-) => flatbuffers.Offset;
+export class CommandBuilder {
+  /** The underlying FlatBuffers builder. */
+  readonly fb: flatbuffers.Builder;
+  /** Auto-incremented command ID, set before each send. */
+  id: bigint = 0n;
 
-export class CommandSender {
-  private pipeline: WebSocketPipeline;
-  private builder: flatbuffers.Builder;
-  private nextId: bigint;
+  constructor(initialCapacity = 256) {
+    this.fb = new flatbuffers.Builder(initialCapacity);
+  }
+
+  /** Create a string offset in the buffer. */
+  createString(s: string): flatbuffers.Offset {
+    return this.fb.createString(s);
+  }
+
+  /** Create a byte vector offset in the buffer. */
+  createByteVector(bytes: Uint8Array): flatbuffers.Offset {
+    return this.fb.createByteVector(bytes);
+  }
+}
+
+/**
+ * Base class for typed FlatBuffer command senders.
+ *
+ * Generic over a `CommandBuilder` subclass so `send` callbacks
+ * receive your typed builder with schema-specific methods.
+ */
+export class CommandSender<B extends CommandBuilder = CommandBuilder> {
+  protected pipeline: WebSocketPipeline;
+  protected builder: B;
+  private nextId: bigint = 0n;
 
   /**
-   * Create a CommandSender bound to a WebSocketPipeline.
-   *
    * @param pipeline - The pipeline to send binary commands through.
-   *   Must be connected (sendBinary silently drops if not connected).
-   * @param initialCapacity - Initial FlatBufferBuilder capacity in bytes (default: 256).
-   *   The builder grows automatically if needed.
+   * @param builder - Your CommandBuilder subclass instance (reused across calls).
    */
-  constructor(pipeline: WebSocketPipeline, initialCapacity = 256) {
+  constructor(pipeline: WebSocketPipeline, builder: B) {
     this.pipeline = pipeline;
-    this.builder = new flatbuffers.Builder(initialCapacity);
-    this.nextId = 0n;
+    this.builder = builder;
   }
 
   /**
    * Build and send a FlatBuffer command over the pipeline.
    *
-   * The buildFn receives the builder (already reset) and an auto-incremented id.
-   * It should create the full CommandMessage table and return the offset.
-   * CommandSender calls `builder.finish()` and sends the resulting bytes.
+   * Resets the builder, sets the id, calls your build function,
+   * then finishes and sends the bytes.
    *
-   * @param buildFn - Function that builds the CommandMessage and returns its offset.
-   * @returns The command id that was assigned (for correlation with server responses).
+   * @param buildFn - Receives the typed builder, returns the root table offset.
+   * @returns The command id assigned (for correlation with server responses).
    */
-  send(buildFn: CommandBuildFn): bigint {
+  protected send(buildFn: (builder: B) => flatbuffers.Offset): bigint {
     const id = this.nextId;
     this.nextId += 1n;
 
-    this.builder.clear();
-    const offset = buildFn(this.builder, id);
-    this.builder.finish(offset);
+    this.builder.id = id;
+    this.builder.fb.clear();
+    const offset = buildFn(this.builder);
+    this.builder.fb.finish(offset);
 
-    const bytes = this.builder.asUint8Array();
-    this.pipeline.sendBinary(bytes);
-
+    this.pipeline.sendBinary(this.builder.fb.asUint8Array());
     return id;
   }
 

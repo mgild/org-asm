@@ -266,24 +266,48 @@ impl ServerEngine for OrderbookEngine {
 
 ### 6. Send Commands to the Server
 
-Use `CommandSender` for typed client-to-server messages (subscribe, unsubscribe, etc.):
+Wrap your generated FlatBuffer statics as builder instance methods, then extend `CommandSender` with typed commands:
 
 ```ts
-import { CommandSender } from 'org-asm/controller';
+import { CommandBuilder, CommandSender } from 'org-asm/controller';
 
-const sender = new CommandSender(pipeline);
-sender.send((builder, id) => {
-  const sym = builder.createString('BTC-USD');
-  Subscribe.startSubscribe(builder);
-  Subscribe.addSymbol(builder, sym);
-  const sub = Subscribe.endSubscribe(builder);
+// Wrap generated statics as instance methods
+class MyBuilder extends CommandBuilder {
+  startSubscribe()                   { Subscribe.startSubscribe(this.fb); }
+  addSymbol(o: flatbuffers.Offset)   { Subscribe.addSymbol(this.fb, o); }
+  addDepth(d: number)                { Subscribe.addDepth(this.fb, d); }
+  endSubscribe()                     { return Subscribe.endSubscribe(this.fb); }
 
-  CommandMessage.startCommandMessage(builder);
-  CommandMessage.addId(builder, id);
-  CommandMessage.addCommandType(builder, Command.Subscribe);
-  CommandMessage.addCommand(builder, sub);
-  return CommandMessage.endCommandMessage(builder);
-});
+  startCommandMessage()              { CommandMessage.startCommandMessage(this.fb); }
+  addId()                            { CommandMessage.addId(this.fb, this.id); }
+  addCommandType(t: Command)         { CommandMessage.addCommandType(this.fb, t); }
+  addCommand(o: flatbuffers.Offset)  { CommandMessage.addCommand(this.fb, o); }
+  endCommandMessage()                { return CommandMessage.endCommandMessage(this.fb); }
+}
+
+// Typed command methods
+class MyCommands extends CommandSender<MyBuilder> {
+  constructor(pipeline: WebSocketPipeline) { super(pipeline, new MyBuilder()); }
+
+  subscribe(symbol: string, depth = 20): bigint {
+    return this.send(b => {
+      const sym = b.createString(symbol);
+      b.startSubscribe();
+      b.addSymbol(sym);
+      b.addDepth(depth);
+      const sub = b.endSubscribe();
+
+      b.startCommandMessage();
+      b.addId();
+      b.addCommandType(Command.Subscribe);
+      b.addCommand(sub);
+      return b.endCommandMessage();
+    });
+  }
+}
+
+const commands = new MyCommands(pipeline);
+commands.subscribe('BTC-USD', 20);
 ```
 
 Define your command schema in `schema/commands.fbs` and generate code with `flatc`.
@@ -394,9 +418,9 @@ Delegates raw WebSocket strings to the Rust engine's `ingest_message()` — all 
 
 Feeds binary FlatBuffer frames from a server engine to a WASM client engine via `ingest_frame()`.
 
-#### `CommandSender`
+#### `CommandBuilder` / `CommandSender<B>`
 
-Sends typed FlatBuffer commands (subscribe, unsubscribe, etc.) to the server. Builder reuse, auto-incrementing IDs.
+Two-class pattern for typed commands. Extend `CommandBuilder` with instance methods wrapping generated FlatBuffer statics (`b.startX()` instead of `X.startX(builder)`). Extend `CommandSender<B>` with typed command methods. Builder reuse, auto-incrementing IDs.
 
 #### `InputController`
 
