@@ -18,13 +18,12 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import type { AnimationLoop } from '../view';
-import type { IFrameConsumer } from '../core/interfaces';
+import type { IAnimationLoop, IFrameConsumer } from '../core/interfaces';
 
 const DEFAULT_THROTTLE_MS = 100;
 
 export function useFrame<F, T>(
-  loop: AnimationLoop<F> | null,
+  loop: IAnimationLoop<F> | null,
   extract: (frame: F) => T,
   throttleMs: number = DEFAULT_THROTTLE_MS,
 ): T | null {

@@ -1,5 +1,7 @@
 export { useWasm } from './useWasm';
 export { useAnimationLoop } from './useAnimationLoop';
+export { useMultiAnimationLoop } from './useMultiAnimationLoop';
+export { useEngine } from './useEngine';
 export { useFrame } from './useFrame';
 export { useConnection } from './useConnection';
 export { useWorker } from './useWorker';

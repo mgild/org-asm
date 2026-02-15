@@ -1,4 +1,5 @@
 export { AnimationLoop } from './AnimationLoop';
+export { MultiAnimationLoop, EngineHandle } from './MultiAnimationLoop';
 export { EffectApplicator } from './EffectApplicator';
 export { ChartDataConsumer } from './ChartDataConsumer';
 export { ThrottledStateSync } from './ThrottledStateSync';
