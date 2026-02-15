@@ -2,55 +2,39 @@
  * CommandBuilder + CommandSender — Typed FlatBuffer commands over WebSocket.
  *
  * Two-class pattern:
- * 1. Extend `CommandBuilder` with instance methods wrapping your generated FlatBuffer statics
+ * 1. Generate a `CommandBuilder` subclass from your `.fbs` schema:
+ *    `npx org-asm gen-builder schema/commands.fbs -o src/generated/`
  * 2. Extend `CommandSender<YourBuilder>` with typed command methods
  *
  * ## Usage
  *
  * ```typescript
- * import { CommandBuilder, CommandSender } from 'org-asm/controller';
- * import { CommandMessage } from './generated/org-asm/commands/command-message';
- * import { Subscribe } from './generated/org-asm/commands/subscribe';
+ * import { CommandSender } from 'org-asm/controller';
+ * import { CommandsBuilder } from './generated/CommandsBuilder';
  * import { Command } from './generated/org-asm/commands/command';
  *
- * // 1. Wrap generated statics as instance methods
- * class MyBuilder extends CommandBuilder {
- *   startSubscribe()                          { Subscribe.startSubscribe(this.fb); }
- *   addSymbol(o: flatbuffers.Offset)          { Subscribe.addSymbol(this.fb, o); }
- *   addDepth(d: number)                       { Subscribe.addDepth(this.fb, d); }
- *   endSubscribe()                            { return Subscribe.endSubscribe(this.fb); }
- *
- *   startCommandMessage()                     { CommandMessage.startCommandMessage(this.fb); }
- *   addId()                                   { CommandMessage.addId(this.fb, this.id); }
- *   addCommandType(t: Command)                { CommandMessage.addCommandType(this.fb, t); }
- *   addCommand(o: flatbuffers.Offset)         { CommandMessage.addCommand(this.fb, o); }
- *   endCommandMessage()                       { return CommandMessage.endCommandMessage(this.fb); }
- * }
- *
- * // 2. Typed command methods
- * class MyCommands extends CommandSender<MyBuilder> {
+ * class MyCommands extends CommandSender<CommandsBuilder> {
  *   constructor(pipeline: WebSocketPipeline) {
- *     super(pipeline, new MyBuilder());
+ *     super(pipeline, new CommandsBuilder());
  *   }
  *
  *   subscribe(symbol: string, depth = 20): bigint {
  *     return this.send(b => {
  *       const sym = b.createString(symbol);
- *       b.startSubscribe();
- *       b.addSymbol(sym);
- *       b.addDepth(depth);
- *       const sub = b.endSubscribe();
+ *       b.subscribe.start();
+ *       b.subscribe.addSymbol(sym);
+ *       b.subscribe.addDepth(depth);
+ *       const sub = b.subscribe.end();
  *
- *       b.startCommandMessage();
- *       b.addId();
- *       b.addCommandType(Command.Subscribe);
- *       b.addCommand(sub);
- *       return b.endCommandMessage();
+ *       b.commandMessage.start();
+ *       b.commandMessage.addId(b.id);
+ *       b.commandMessage.addCommandType(Command.Subscribe);
+ *       b.commandMessage.addCommand(sub);
+ *       return b.commandMessage.end();
  *     });
  *   }
  * }
  *
- * // Clean typed API:
  * const commands = new MyCommands(pipeline);
  * commands.subscribe('BTC-USD', 20);
  * ```

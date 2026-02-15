@@ -267,63 +267,41 @@ impl ServerEngine for OrderbookEngine {
 
 ### 6. Send Commands to the Server
 
-Wrap your generated FlatBuffer statics as builder instance methods, then extend `CommandSender` with typed commands:
+Generate a typed `CommandBuilder` subclass from your `.fbs` schema:
+
+```bash
+npx org-asm gen-builder schema/commands.fbs -o src/generated/
+```
+
+This produces a `CommandsBuilder` with nested table objects — no manual boilerplate:
 
 ```ts
-import { CommandBuilder, CommandSender } from 'org-asm/controller';
+import { CommandSender } from 'org-asm/controller';
+import { CommandsBuilder } from './generated/CommandsBuilder';
+import { Command } from './generated/org-asm/commands/command';
 
-// Wrap generated statics as instance methods
-class MyBuilder extends CommandBuilder {
-  startSubscribe()                   { Subscribe.startSubscribe(this.fb); }
-  addSymbol(o: flatbuffers.Offset)   { Subscribe.addSymbol(this.fb, o); }
-  addDepth(d: number)                { Subscribe.addDepth(this.fb, d); }
-  endSubscribe()                     { return Subscribe.endSubscribe(this.fb); }
-
-  startCommandMessage()              { CommandMessage.startCommandMessage(this.fb); }
-  addId()                            { CommandMessage.addId(this.fb, this.id); }
-  addCommandType(t: Command)         { CommandMessage.addCommandType(this.fb, t); }
-  addCommand(o: flatbuffers.Offset)  { CommandMessage.addCommand(this.fb, o); }
-  endCommandMessage()                { return CommandMessage.endCommandMessage(this.fb); }
-}
-
-// Typed command methods
-class MyCommands extends CommandSender<MyBuilder> {
-  constructor(pipeline: WebSocketPipeline) { super(pipeline, new MyBuilder()); }
+class MyCommands extends CommandSender<CommandsBuilder> {
+  constructor(pipeline: WebSocketPipeline) { super(pipeline, new CommandsBuilder()); }
 
   subscribe(symbol: string, depth = 20): bigint {
     return this.send(b => {
       const sym = b.createString(symbol);
-      b.startSubscribe();
-      b.addSymbol(sym);
-      b.addDepth(depth);
-      const sub = b.endSubscribe();
+      b.subscribe.start();
+      b.subscribe.addSymbol(sym);
+      b.subscribe.addDepth(depth);
+      const sub = b.subscribe.end();
 
-      b.startCommandMessage();
-      b.addId();
-      b.addCommandType(Command.Subscribe);
-      b.addCommand(sub);
-      return b.endCommandMessage();
+      b.commandMessage.start();
+      b.commandMessage.addId(b.id);
+      b.commandMessage.addCommandType(Command.Subscribe);
+      b.commandMessage.addCommand(sub);
+      return b.commandMessage.end();
     });
   }
 }
 
 const commands = new MyCommands(pipeline);
 commands.subscribe('BTC-USD', 20);
-```
-
-Define your command schema in `schema/commands.fbs` and generate code with `flatc`.
-
-Or skip the boilerplate entirely with `gen-builder`:
-
-```bash
-npx org-asm gen-builder schema/commands.fbs -o src/generated/
-```
-
-This generates a `CommandsBuilder` class with nested table objects:
-
-```ts
-const commands = new MyCommands(pipeline);
-// Generated builder provides: b.subscribe.start(), b.subscribe.addSymbol(), etc.
 ```
 
 ### 7. Shared Rust Crate
