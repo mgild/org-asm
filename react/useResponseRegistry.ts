@@ -1,15 +1,16 @@
 /**
  * useResponseRegistry — Wire a ResponseRegistry onto a WebSocketPipeline.
  *
- * Creates a ResponseRegistry, intercepts binary messages (trying the registry
- * first, falling through to `onMessage` for non-response frames), and
+ * Creates a ResponseRegistry, installs binary middleware (trying the registry
+ * first, falling through to the next handler for non-response frames), and
  * rejects all pending promises on disconnect or unmount.
  *
  * Usage:
  *   const ws = useMemo(() => new WebSocketPipeline({ url: 'wss://...' }), []);
  *   const { connected } = useConnection(ws);
  *   const registry = useResponseRegistry(ws, extractId, {
- *     onMessage: (data) => parser.ingestFrame(data),
+ *     timeoutMs: 5000,
+ *     deserialize: parseMyResponse,
  *   });
  *   const commands = useCommands(ws, registry);
  *
@@ -20,20 +21,22 @@ import { useRef, useEffect } from 'react';
 import { ResponseRegistry } from '../controller';
 import type { WebSocketPipeline } from '../controller';
 
-export function useResponseRegistry(
+export function useResponseRegistry<R = ArrayBuffer>(
   pipeline: WebSocketPipeline | null,
   extractId: (data: ArrayBuffer) => bigint | null,
   options?: {
     timeoutMs?: number;
-    onMessage?: (data: ArrayBuffer) => void;
+    deserialize?: (data: ArrayBuffer) => R;
   },
-): ResponseRegistry | null {
-  const registryRef = useRef<ResponseRegistry | null>(null);
-  const onMessageRef = useRef(options?.onMessage);
-  onMessageRef.current = options?.onMessage;
+): ResponseRegistry<R> | null {
+  const registryRef = useRef<ResponseRegistry<R> | null>(null);
 
   if (pipeline && !registryRef.current) {
-    registryRef.current = new ResponseRegistry(extractId, options?.timeoutMs);
+    registryRef.current = new ResponseRegistry<R>(
+      extractId,
+      options?.timeoutMs,
+      options?.deserialize,
+    );
   }
   if (!pipeline) {
     registryRef.current = null;
@@ -44,9 +47,10 @@ export function useResponseRegistry(
   useEffect(() => {
     if (!pipeline || !registry) return;
 
-    pipeline.onBinaryMessage((data) => {
+    // Install as middleware — non-response messages pass through to next handler
+    const unuse = pipeline.use((data, next) => {
       if (!registry.handleMessage(data)) {
-        onMessageRef.current?.(data);
+        next();
       }
     });
 
@@ -55,6 +59,7 @@ export function useResponseRegistry(
     });
 
     return () => {
+      unuse();
       registry.rejectAll('Hook cleanup');
     };
   }, [pipeline, registry]);

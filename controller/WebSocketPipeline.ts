@@ -43,9 +43,14 @@ export interface WebSocketConfig {
   staleThresholdMs?: number;
   /** Enable binary frame backpressure (default: false). When true, binary messages are coalesced via rAF (latest-wins). */
   backpressure?: boolean;
+  /** Heartbeat interval in ms (default: disabled). Sends a keepalive message at this interval to prevent proxy timeouts. */
+  heartbeatIntervalMs?: number;
+  /** Heartbeat message to send (default: single zero byte). Can be string or ArrayBuffer. */
+  heartbeatMessage?: ArrayBuffer | string;
 }
 
 export type BinaryMessageHandler = (data: ArrayBuffer) => void;
+export type BinaryMiddleware = (data: ArrayBuffer, next: () => void) => void;
 
 export class WebSocketPipeline implements IConnectionPipeline {
   private ws: WebSocket | null = null;
@@ -56,13 +61,23 @@ export class WebSocketPipeline implements IConnectionPipeline {
   private _state: ConnectionState = ConnectionState.Disconnected;
   private _lastMessageAt = 0;
 
-  // Handlers
-  private messageHandler: MessageHandler | null = null;
+  // Handlers (multi-subscriber)
+  private messageHandlers: MessageHandler[] = [];
   private binaryMessageHandler: BinaryMessageHandler | null = null;
-  private connectHandler: ConnectionHandler | null = null;
-  private disconnectHandler: ConnectionHandler | null = null;
-  private stateChangeHandler: StateChangeHandler | null = null;
-  private errorHandler: ErrorHandler | null = null;
+  private connectHandlers: ConnectionHandler[] = [];
+  private disconnectHandlers: ConnectionHandler[] = [];
+  private stateChangeHandlers: StateChangeHandler[] = [];
+  private errorHandlers: ErrorHandler[] = [];
+
+  // Binary middleware chain (runs before terminal binaryMessageHandler)
+  private _binaryMiddleware: BinaryMiddleware[] = [];
+
+  // Message counters
+  private _messageCount = 0;
+  private _binaryMessageCount = 0;
+
+  // Heartbeat state
+  private _heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   // Backpressure state
   private _latestBinaryFrame: ArrayBuffer | null = null;
@@ -78,6 +93,8 @@ export class WebSocketPipeline implements IConnectionPipeline {
       binaryType: config.binaryType ?? 'blob',
       staleThresholdMs: config.staleThresholdMs ?? 5000,
       backpressure: config.backpressure ?? false,
+      heartbeatIntervalMs: config.heartbeatIntervalMs ?? 0,
+      heartbeatMessage: config.heartbeatMessage ?? new Uint8Array([0]).buffer,
     };
   }
 
@@ -85,40 +102,49 @@ export class WebSocketPipeline implements IConnectionPipeline {
   // Handler registration
   // ============================================
 
-  /** Set the handler for incoming text messages */
+  /** Add a handler for incoming text messages */
   onMessage(handler: MessageHandler): this {
-    this.messageHandler = handler;
+    this.messageHandlers.push(handler);
     return this;
   }
 
-  /** Set the handler for incoming binary messages (ArrayBuffer) */
+  /** Set the terminal handler for incoming binary messages (ArrayBuffer) */
   onBinaryMessage(handler: BinaryMessageHandler): this {
     this.binaryMessageHandler = handler;
     return this;
   }
 
-  /** Set the handler for connection open */
+  /** Add a handler for connection open */
   onConnect(handler: ConnectionHandler): this {
-    this.connectHandler = handler;
+    this.connectHandlers.push(handler);
     return this;
   }
 
-  /** Set the handler for connection close */
+  /** Add a handler for connection close */
   onDisconnect(handler: ConnectionHandler): this {
-    this.disconnectHandler = handler;
+    this.disconnectHandlers.push(handler);
     return this;
   }
 
-  /** Set the handler for state transitions */
+  /** Add a handler for state transitions */
   onStateChange(handler: StateChangeHandler): this {
-    this.stateChangeHandler = handler;
+    this.stateChangeHandlers.push(handler);
     return this;
   }
 
-  /** Set the handler for connection errors */
+  /** Add a handler for connection errors */
   onError(handler: ErrorHandler): this {
-    this.errorHandler = handler;
+    this.errorHandlers.push(handler);
     return this;
+  }
+
+  /** Add binary message middleware. Runs before the terminal onBinaryMessage handler. Returns unsubscribe function. */
+  use(middleware: BinaryMiddleware): () => void {
+    this._binaryMiddleware.push(middleware);
+    return () => {
+      const i = this._binaryMiddleware.indexOf(middleware);
+      if (i >= 0) this._binaryMiddleware.splice(i, 1);
+    };
   }
 
   // ============================================
@@ -141,6 +167,7 @@ export class WebSocketPipeline implements IConnectionPipeline {
       this.reconnectTimeout = null;
     }
     this.stopBackpressureLoop();
+    this.stopHeartbeat();
     // Only close if OPEN to avoid "closed before connection established" error
     // during React StrictMode unmount-remount cycles
     if (this.ws?.readyState === WebSocket.OPEN) {
@@ -175,6 +202,16 @@ export class WebSocketPipeline implements IConnectionPipeline {
     return this._lastMessageAt;
   }
 
+  /** Total messages received (text + binary) */
+  get messageCount(): number {
+    return this._messageCount;
+  }
+
+  /** Total binary messages received */
+  get binaryMessageCount(): number {
+    return this._binaryMessageCount;
+  }
+
   // ============================================
   // Send
   // ============================================
@@ -205,16 +242,17 @@ export class WebSocketPipeline implements IConnectionPipeline {
   private setState(newState: ConnectionState): void {
     if (this._state === newState) return;
     this._state = newState;
-    this.stateChangeHandler?.(newState);
+    for (const h of this.stateChangeHandlers) h(newState);
   }
 
   private emitError(type: ConnectionError['type'], message: string): void {
-    this.errorHandler?.({
+    const error: ConnectionError = {
       type,
       message,
       attempt: this.reconnectAttempts,
       timestamp: Date.now(),
-    });
+    };
+    for (const h of this.errorHandlers) h(error);
   }
 
   // ============================================
@@ -239,7 +277,7 @@ export class WebSocketPipeline implements IConnectionPipeline {
       if (this._latestBinaryFrame !== null) {
         const frame = this._latestBinaryFrame;
         this._latestBinaryFrame = null;
-        this.binaryMessageHandler?.(frame);
+        this.dispatchBinaryMessage(frame);
       }
       this._rafId = requestAnimationFrame(flush);
     };
@@ -255,6 +293,44 @@ export class WebSocketPipeline implements IConnectionPipeline {
   }
 
   // ============================================
+  // Binary middleware dispatch
+  // ============================================
+
+  private dispatchBinaryMessage(data: ArrayBuffer): void {
+    let index = 0;
+    const chain = this._binaryMiddleware;
+    const terminal = this.binaryMessageHandler;
+    const next = () => {
+      if (index < chain.length) {
+        chain[index++](data, next);
+      } else {
+        terminal?.(data);
+      }
+    };
+    next();
+  }
+
+  // ============================================
+  // Heartbeat
+  // ============================================
+
+  private startHeartbeat(): void {
+    if (!this.config.heartbeatIntervalMs) return;
+    this._heartbeatInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(this.config.heartbeatMessage);
+      }
+    }, this.config.heartbeatIntervalMs);
+  }
+
+  private stopHeartbeat(): void {
+    if (this._heartbeatInterval !== null) {
+      clearInterval(this._heartbeatInterval);
+      this._heartbeatInterval = null;
+    }
+  }
+
+  // ============================================
   // Connection
   // ============================================
 
@@ -266,24 +342,27 @@ export class WebSocketPipeline implements IConnectionPipeline {
     ws.onopen = () => {
       this.reconnectAttempts = 0;
       this.setState(ConnectionState.Connected);
-      this.connectHandler?.();
+      for (const h of this.connectHandlers) h();
       if (this.config.backpressure) {
         this.startBackpressureLoop();
       }
+      this.startHeartbeat();
     };
 
     ws.onmessage = (event) => {
       this._lastMessageAt = Date.now();
+      this._messageCount++;
       if (event.data instanceof ArrayBuffer) {
+        this._binaryMessageCount++;
         if (this.config.backpressure) {
           // Latest-wins coalescing: store frame, deliver on next rAF
           this._latestBinaryFrame = event.data;
         } else {
-          this.binaryMessageHandler?.(event.data);
+          this.dispatchBinaryMessage(event.data);
         }
       } else {
         // Text messages always pass through immediately
-        this.messageHandler?.(event.data as string);
+        for (const h of this.messageHandlers) h(event.data as string);
       }
     };
 
@@ -291,7 +370,8 @@ export class WebSocketPipeline implements IConnectionPipeline {
       // Skip if this is an old ws that we intentionally abandoned (e.g., during StrictMode unmount)
       if (this.ws !== ws) return;
       this.stopBackpressureLoop();
-      this.disconnectHandler?.();
+      this.stopHeartbeat();
+      for (const h of this.disconnectHandlers) h();
 
       if (this.intentionallyClosed) {
         this.setState(ConnectionState.Disconnected);

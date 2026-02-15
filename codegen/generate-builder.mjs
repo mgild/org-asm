@@ -587,17 +587,17 @@ export function generateSender(schema, options = {}) {
     // Sync method — returns bigint (command ID)
     methodBodies.push(`  ${methodName}(${argsParam}): bigint {\n${bodyLines.join('\n')}\n  }`);
 
-    // Async method — returns Promise<ArrayBuffer> (response bytes)
+    // Async method — returns Promise<R> (deserialized response)
     const asyncBodyLines = bodyLines.map(line =>
       line === '    return this.send(b => {' ? '    return this.sendWithResponse(b => {' : line
     );
-    methodBodies.push(`  ${methodName}Async(${argsParam}): Promise<ArrayBuffer> {\n${asyncBodyLines.join('\n')}\n  }`);
+    methodBodies.push(`  ${methodName}Async(${argsParam}): Promise<R> {\n${asyncBodyLines.join('\n')}\n  }`);
   }
 
   // ── Class ────────────────────────────────────────────────────────────────
 
-  lines.push(`export class ${senderClassName} extends CommandSender<${builderClassName}> {`);
-  lines.push(`  constructor(pipeline: WebSocketPipeline, registry?: ResponseRegistry) {`);
+  lines.push(`export class ${senderClassName}<R = ArrayBuffer> extends CommandSender<${builderClassName}, R> {`);
+  lines.push(`  constructor(pipeline: WebSocketPipeline, registry?: ResponseRegistry<R>) {`);
   lines.push(`    super(pipeline, new ${builderClassName}());`);
   lines.push(`    if (registry) { this.setResponseRegistry(registry); }`);
   lines.push(`  }`);
@@ -630,13 +630,13 @@ export function generateHook(schema, options = {}) {
     `import type { ResponseRegistry } from '${frameworkImport}';`,
     `import { ${senderClassName} } from './${senderClassName}';`,
     '',
-    `export function ${hookName}(`,
+    `export function ${hookName}<R = ArrayBuffer>(`,
     `  pipeline: WebSocketPipeline | null,`,
-    `  registry?: ResponseRegistry,`,
-    `): ${senderClassName} | null {`,
-    `  const ref = useRef<${senderClassName} | null>(null);`,
+    `  registry?: ResponseRegistry<R>,`,
+    `): ${senderClassName}<R> | null {`,
+    `  const ref = useRef<${senderClassName}<R> | null>(null);`,
     `  if (pipeline && !ref.current) {`,
-    `    ref.current = new ${senderClassName}(pipeline, registry);`,
+    `    ref.current = new ${senderClassName}<R>(pipeline, registry);`,
     `  }`,
     `  if (!pipeline) { ref.current = null; }`,
     `  return ref.current;`,

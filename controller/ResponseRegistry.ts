@@ -23,26 +23,30 @@
  * pipeline.onDisconnect(() => registry.rejectAll('Connection lost'));
  * ```
  */
-export class ResponseRegistry {
+export class ResponseRegistry<R = ArrayBuffer> {
   private pending: Map<bigint, {
-    resolve: (data: ArrayBuffer) => void;
+    resolve: (data: R) => void;
     reject: (reason: Error) => void;
     timer: ReturnType<typeof setTimeout>;
   }> = new Map();
   private extractId: (data: ArrayBuffer) => bigint | null;
+  private deserialize: (data: ArrayBuffer) => R;
   private timeoutMs: number;
 
   constructor(
     extractId: (data: ArrayBuffer) => bigint | null,
     timeoutMs = 5000,
+    deserialize?: (data: ArrayBuffer) => R,
   ) {
     this.extractId = extractId;
     this.timeoutMs = timeoutMs;
+    // Safe cast: when R = ArrayBuffer (default), data is already R
+    this.deserialize = deserialize ?? ((data: ArrayBuffer) => data as unknown as R);
   }
 
-  /** Register a pending response for the given command ID. Returns a promise that resolves with the response bytes. */
-  register(id: bigint): Promise<ArrayBuffer> {
-    return new Promise<ArrayBuffer>((resolve, reject) => {
+  /** Register a pending response for the given command ID. Returns a promise that resolves with the deserialized response. */
+  register(id: bigint): Promise<R> {
+    return new Promise<R>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Response timeout for command ${id}`));
@@ -62,7 +66,7 @@ export class ResponseRegistry {
 
     clearTimeout(entry.timer);
     this.pending.delete(id);
-    entry.resolve(data);
+    entry.resolve(this.deserialize(data));
     return true;
   }
 

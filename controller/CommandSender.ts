@@ -73,11 +73,11 @@ export class CommandBuilder {
  * Generic over a `CommandBuilder` subclass so `send` callbacks
  * receive your typed builder with schema-specific methods.
  */
-export class CommandSender<B extends CommandBuilder = CommandBuilder> {
+export class CommandSender<B extends CommandBuilder = CommandBuilder, R = ArrayBuffer> {
   protected pipeline: WebSocketPipeline;
   protected builder: B;
   private nextId: bigint = 0n;
-  protected responseRegistry: ResponseRegistry | null = null;
+  protected responseRegistry: ResponseRegistry<R> | null = null;
 
   constructor(pipeline: WebSocketPipeline, builder: B) {
     this.pipeline = pipeline;
@@ -85,7 +85,7 @@ export class CommandSender<B extends CommandBuilder = CommandBuilder> {
   }
 
   /** Attach a ResponseRegistry for sendWithResponse support. */
-  setResponseRegistry(registry: ResponseRegistry): void {
+  setResponseRegistry(registry: ResponseRegistry<R>): void {
     this.responseRegistry = registry;
   }
 
@@ -106,7 +106,7 @@ export class CommandSender<B extends CommandBuilder = CommandBuilder> {
    * Build, send, and await a response for a FlatBuffer command.
    * Requires a ResponseRegistry to be set via setResponseRegistry().
    */
-  protected sendWithResponse(buildFn: (builder: B) => flatbuffers.Offset): Promise<ArrayBuffer> {
+  protected sendWithResponse(buildFn: (builder: B) => flatbuffers.Offset): Promise<R> {
     if (!this.responseRegistry) {
       throw new Error('CommandSender: sendWithResponse requires a ResponseRegistry. Call setResponseRegistry() first.');
     }

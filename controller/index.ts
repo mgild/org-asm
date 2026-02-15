@@ -32,3 +32,5 @@ export { MessageParser, WasmIngestParser, BinaryFrameParser } from './MessagePar
 export type { EngineDataTarget } from './MessageParser';
 export { CommandBuilder, CommandSender } from './CommandSender';
 export { ResponseRegistry } from './ResponseRegistry';
+export { SubscriptionManager } from './SubscriptionManager';
+export type { BinaryMiddleware } from './WebSocketPipeline';

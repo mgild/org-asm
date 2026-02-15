@@ -5,3 +5,7 @@ export { useConnection } from './useConnection';
 export { useWorker } from './useWorker';
 export type { UseWorkerConfig } from './useWorker';
 export { useResponseRegistry } from './useResponseRegistry';
+export { useSubscriptionManager } from './useSubscriptionManager';
+export { useOrgAsmDiagnostics } from './useOrgAsmDiagnostics';
+export type { DiagnosticsData } from './useOrgAsmDiagnostics';
+export { OrgAsmDevTools } from './OrgAsmDevTools';

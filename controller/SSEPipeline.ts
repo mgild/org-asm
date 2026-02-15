@@ -53,12 +53,12 @@ export class SSEPipeline implements IConnectionPipeline {
   private _state: ConnectionState = ConnectionState.Disconnected;
   private _lastMessageAt = 0;
 
-  // Handlers
-  private messageHandler: MessageHandler | null = null;
-  private connectHandler: ConnectionHandler | null = null;
-  private disconnectHandler: ConnectionHandler | null = null;
-  private stateChangeHandler: StateChangeHandler | null = null;
-  private errorHandler: ErrorHandler | null = null;
+  // Handlers (multi-subscriber)
+  private messageHandlers: MessageHandler[] = [];
+  private connectHandlers: ConnectionHandler[] = [];
+  private disconnectHandlers: ConnectionHandler[] = [];
+  private stateChangeHandlers: StateChangeHandler[] = [];
+  private errorHandlers: ErrorHandler[] = [];
 
   constructor(config: SSEConfig) {
     this.config = {
@@ -77,27 +77,27 @@ export class SSEPipeline implements IConnectionPipeline {
   // ============================================
 
   onMessage(handler: MessageHandler): this {
-    this.messageHandler = handler;
+    this.messageHandlers.push(handler);
     return this;
   }
 
   onConnect(handler: ConnectionHandler): this {
-    this.connectHandler = handler;
+    this.connectHandlers.push(handler);
     return this;
   }
 
   onDisconnect(handler: ConnectionHandler): this {
-    this.disconnectHandler = handler;
+    this.disconnectHandlers.push(handler);
     return this;
   }
 
   onStateChange(handler: StateChangeHandler): this {
-    this.stateChangeHandler = handler;
+    this.stateChangeHandlers.push(handler);
     return this;
   }
 
   onError(handler: ErrorHandler): this {
-    this.errorHandler = handler;
+    this.errorHandlers.push(handler);
     return this;
   }
 
@@ -168,16 +168,12 @@ export class SSEPipeline implements IConnectionPipeline {
   private setState(newState: ConnectionState): void {
     if (this._state === newState) return;
     this._state = newState;
-    this.stateChangeHandler?.(newState);
+    for (const h of this.stateChangeHandlers) h(newState);
   }
 
   private emitError(type: ConnectionError['type'], message: string): void {
-    this.errorHandler?.({
-      type,
-      message,
-      attempt: this.reconnectAttempts,
-      timestamp: Date.now(),
-    });
+    const error: ConnectionError = { type, message, attempt: this.reconnectAttempts, timestamp: Date.now() };
+    for (const h of this.errorHandlers) h(error);
   }
 
   // ============================================
@@ -205,14 +201,14 @@ export class SSEPipeline implements IConnectionPipeline {
     es.onopen = () => {
       this.reconnectAttempts = 0;
       this.setState(ConnectionState.Connected);
-      this.connectHandler?.();
+      for (const h of this.connectHandlers) h();
     };
 
     // Register listeners for each configured event type
     for (const eventType of this.config.eventTypes) {
       es.addEventListener(eventType, ((event: MessageEvent) => {
         this._lastMessageAt = Date.now();
-        this.messageHandler?.(event.data as string);
+        for (const h of this.messageHandlers) h(event.data as string);
       }) as EventListener);
     }
 
@@ -223,7 +219,7 @@ export class SSEPipeline implements IConnectionPipeline {
       // Close to prevent EventSource's built-in reconnect —
       // we manage reconnect ourselves for consistent backoff/jitter behavior
       es.close();
-      this.disconnectHandler?.();
+      for (const h of this.disconnectHandlers) h();
 
       if (this.intentionallyClosed) {
         this.setState(ConnectionState.Disconnected);

@@ -296,44 +296,65 @@ commands.requestSnapshot();
 const response = await commands.subscribeAsync({ symbol: 'BTC-USD' });
 ```
 
-Fields with schema defaults (e.g. `depth: uint16 = 20`) become optional in the generated args. Every method has both a sync variant (returns `bigint` command ID) and an `Async` variant (returns `Promise<ArrayBuffer>`).
+Fields with schema defaults (e.g. `depth: uint16 = 20`) become optional in the generated args. Every method has both a sync variant (returns `bigint` command ID) and an `Async` variant (returns `Promise<R>` — `ArrayBuffer` by default, or a typed response if a deserializer is provided).
 
 Use `--no-sender` to skip sender+hook generation, or `--no-hook` to skip just the hook.
 
 ### 6b. Await Command Responses
 
-The `Async` variants require a `ResponseRegistry` to correlate responses by command ID. The `useResponseRegistry` hook handles all wiring:
+The `Async` variants require a `ResponseRegistry` to correlate responses by command ID. The `useResponseRegistry` hook installs a binary middleware interceptor and handles disconnect cleanup:
 
 ```ts
 import { WebSocketPipeline } from 'org-asm/controller';
 import { useConnection, useResponseRegistry } from 'org-asm/react';
 import { useCommands } from './generated/useCommands';
 
-// Create pipeline explicitly so both hooks can share it
-const ws = useMemo(() => new WebSocketPipeline({ url: 'wss://...' }), []);
+const ws = useMemo(() => new WebSocketPipeline({ url: 'wss://...', binaryType: 'arraybuffer' }), []);
 const { connected } = useConnection(ws);
 
-// Wire registry — intercepts binary messages, rejects on disconnect
-const registry = useResponseRegistry(ws, extractId, {
-  onMessage: (data) => parser.ingestFrame(data), // non-response frames
-});
-
+// Install registry as middleware — responses consumed, frames pass through
+const registry = useResponseRegistry(ws, extractId);
 const commands = useCommands(ws, registry);
+
 const response = await commands.subscribeAsync({ symbol: 'ETH-USD' });
+```
+
+For typed responses, provide a deserializer — all `Async` methods return your type:
+
+```ts
+const registry = useResponseRegistry<MyResponse>(ws, extractId, {
+  deserialize: (data) => MyResponse.getRootAsMyResponse(new ByteBuffer(new Uint8Array(data))),
+});
+const commands = useCommands(ws, registry);
+const typed = await commands.subscribeAsync({ symbol: 'ETH-USD' }); // MyResponse
 ```
 
 The `extractId` function reads the command ID from your response schema:
 
 ```ts
 const extractId = (data: ArrayBuffer) => {
-  const msg = ResponseMessage.getRootAsResponseMessage(
-    new ByteBuffer(new Uint8Array(data)),
-  );
-  return msg.id(); // bigint | null
+  const bb = new ByteBuffer(new Uint8Array(data));
+  return ResponseMessage.getRootAsResponseMessage(bb).id(); // bigint | null
 };
 ```
 
-For manual wiring without the hook, use `ResponseRegistry` directly from `org-asm/controller`.
+### 6b-2. Auto-Replay Subscriptions on Reconnect
+
+Use `SubscriptionManager` (or the `useSubscriptionManager` hook) to automatically replay subscribe commands when the connection drops and reconnects:
+
+```ts
+import { useSubscriptionManager } from 'org-asm/react';
+
+const subs = useSubscriptionManager(ws);
+
+// Subscribe (replays automatically on every reconnect)
+subs?.add('BTC-USD', () => commands.subscribe({ symbol: 'BTC-USD', depth: 20 }));
+subs?.add('ETH-USD', () => commands.subscribe({ symbol: 'ETH-USD' }));
+
+// Unsubscribe (remove from replay list — send unsubscribe separately)
+subs?.remove('BTC-USD');
+commands.unsubscribe({ symbol: 'BTC-USD' });
+```
 
 ### 6c. Server-Side Command Handler (Rust)
 
@@ -420,7 +441,10 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
 | `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
 | `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
-| `useResponseRegistry(pipeline, extractId, options?)` | `ResponseRegistry \| null` | Wire response correlation onto a WebSocketPipeline with interceptor + disconnect cleanup |
+| `useResponseRegistry(pipeline, extractId, options?)` | `ResponseRegistry<R> \| null` | Wire response correlation as binary middleware + disconnect cleanup |
+| `useSubscriptionManager(pipeline)` | `SubscriptionManager \| null` | Track subscriptions and auto-replay on reconnect |
+| `useOrgAsmDiagnostics({ pipeline, registry })` | `DiagnosticsData` | Poll connection stats, message rates, pending commands at ~2Hz |
+| `OrgAsmDevTools` | React component | Drop-in floating diagnostics panel (connection, msg/s, pending) |
 
 ### Core
 
@@ -480,7 +504,13 @@ Auto-reconnecting WebSocket with state machine, exponential backoff with jitter,
 
 **Backpressure:** Set `backpressure: true` to coalesce binary frames via `requestAnimationFrame` (latest-wins). Text messages pass through immediately.
 
-**Error surfacing:** `pipeline.onError(handler)` fires `ConnectionError` with type (`connect_failed` | `connection_lost` | `max_retries_exhausted`), attempt count, and timestamp.
+**Error surfacing:** `pipeline.onError(handler)` fires `ConnectionError` with type (`connect_failed` | `connection_lost` | `max_retries_exhausted`), attempt count, and timestamp. All `on*` handlers are multi-subscriber — calling `onConnect(h1)` then `onConnect(h2)` fires both.
+
+**Heartbeat:** Set `heartbeatIntervalMs` to send periodic keepalive messages, preventing proxy/firewall timeouts. Configure `heartbeatMessage` (default: single zero byte).
+
+**Binary middleware:** `pipeline.use((data, next) => { ... })` installs an interceptor on the binary message path. Middleware runs in order before the terminal `onBinaryMessage` handler. Returns an unsubscribe function. Used internally by `ResponseRegistry` to intercept responses.
+
+**Diagnostics:** `pipeline.messageCount` and `pipeline.binaryMessageCount` track total messages received.
 
 #### `WasmIngestParser`
 
@@ -490,17 +520,31 @@ Delegates raw WebSocket strings to the Rust engine's `ingest_message()` — all 
 
 Feeds binary FlatBuffer frames from a server engine to a WASM client engine via `ingest_frame()`.
 
-#### `ResponseRegistry`
+#### `ResponseRegistry<R>`
 
-Correlates command responses by ID. Standalone class — no dependency on `CommandSender`.
+Correlates command responses by ID. Generic over response type `R` (defaults to `ArrayBuffer`). Standalone class — no dependency on `CommandSender`.
 
 | Method | Description |
 |--------|-------------|
-| `constructor(extractId, timeoutMs?)` | Create registry with ID extractor function and optional timeout (default 5000ms) |
-| `register(id: bigint)` | Create pending promise for a command ID, rejects on timeout |
-| `handleMessage(data: ArrayBuffer)` | Match incoming message as response, returns `true` if consumed |
+| `constructor(extractId, timeoutMs?, deserialize?)` | Create registry with ID extractor, optional timeout (default 5000ms), optional deserializer |
+| `register(id: bigint)` | Create pending `Promise<R>` for a command ID, rejects on timeout |
+| `handleMessage(data: ArrayBuffer)` | Match incoming message as response, deserialize and resolve. Returns `true` if consumed |
 | `rejectAll(reason: string)` | Reject all pending promises (call on disconnect) |
 | `pendingCount` | Number of in-flight requests |
+
+#### `SubscriptionManager`
+
+Tracks active subscriptions and replays them on reconnect. Hooks into `pipeline.onConnect()`.
+
+| Method | Description |
+|--------|-------------|
+| `constructor(pipeline)` | Create manager, wire reconnect replay |
+| `add(key, replayFn)` | Track a subscription and execute immediately |
+| `remove(key)` | Remove from replay list (does not send unsubscribe) |
+| `has(key)` | Check if key is active |
+| `replayAll()` | Replay all subscriptions (called automatically on reconnect) |
+| `size` | Number of active subscriptions |
+| `keys` | All active subscription keys |
 
 #### `CommandBuilder` / `CommandSender<B>`
 
@@ -610,6 +654,7 @@ Template for processing client commands (subscribe/unsubscribe). See `server/com
 - **Batched canvas rendering** — color-quantized Path2D batching reduces GPU state changes 10-30x
 - **Shared Rust crate** — domain logic compiled once, used in both server (native) and client (WASM)
 - **FlatBuffer commands** — typed bidirectional communication, builder reuse eliminates allocation
+- **Composable binary middleware** — `pipeline.use()` chain with zero-copy pass-through, no handler conflicts
 
 ## Dependencies
 
@@ -640,6 +685,11 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] SSE/EventSource pipeline alongside WebSocket (`SSEPipeline` + `IConnectionPipeline`)
 - [x] Response correlation (`ResponseRegistry` + async command variants)
 - [x] Server-side Rust codegen (`gen-handler` — trait + dispatch from `.fbs`)
+- [x] Binary middleware chain (`pipeline.use()` — composable interceptors)
+- [x] WebSocket heartbeat (configurable keepalive interval)
+- [x] Typed async responses (`ResponseRegistry<R>` + deserialize)
+- [x] Reconnect resubscribe (`SubscriptionManager` + `useSubscriptionManager`)
+- [x] DevTools panel (`OrgAsmDevTools` + `useOrgAsmDiagnostics`)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Benchmark suite
 
