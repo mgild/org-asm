@@ -42,6 +42,7 @@
   },
   "files": [
     "bin",
+    "codegen",
     "dist",
     "schema",
     "model/engine-template.rs",

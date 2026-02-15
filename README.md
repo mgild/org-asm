@@ -313,6 +313,19 @@ commands.subscribe('BTC-USD', 20);
 
 Define your command schema in `schema/commands.fbs` and generate code with `flatc`.
 
+Or skip the boilerplate entirely with `gen-builder`:
+
+```bash
+npx org-asm gen-builder schema/commands.fbs -o src/generated/
+```
+
+This generates a `CommandsBuilder` class with nested table objects:
+
+```ts
+const commands = new MyCommands(pipeline);
+// Generated builder provides: b.subscribe.start(), b.subscribe.addSymbol(), etc.
+```
+
 ### 7. Shared Rust Crate
 
 Keep domain types, validation, and constants in a shared crate used by both server and WASM engines:
@@ -516,6 +529,7 @@ Template for processing client commands (subscribe/unsubscribe). See `server/com
 |---------|-------------|
 | `npx org-asm init <name>` | Scaffold full-stack project (WASM + server + shared + React) |
 | `npx org-asm build` | Run `flatc` + `wasm-pack` + `cargo build` pipeline |
+| `npx org-asm gen-builder <schema.fbs>` | Generate `CommandBuilder` subclass from FlatBuffers schema |
 
 ## FlatBuffers Schema Types
 

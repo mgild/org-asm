@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { join, resolve, basename, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 // ─── ANSI colors ────────────────────────────────────────────────────────────
 
@@ -31,6 +33,9 @@ switch (command) {
   case 'build':
     cmdBuild(args.slice(1));
     break;
+  case 'gen-builder':
+    cmdGenBuilder(args.slice(1));
+    break;
   default:
     console.error(red(`Unknown command: ${command}`));
     console.error(`Run ${cyan('npx org-asm --help')} for available commands.`);
@@ -47,12 +52,14 @@ ${bold('USAGE')}
   npx org-asm ${cyan('<command>')} [options]
 
 ${bold('COMMANDS')}
-  ${cyan('init')} ${dim('<project-name>')}   Scaffold a new org-asm project
-  ${cyan('build')}                  Run the full build pipeline
+  ${cyan('init')} ${dim('<project-name>')}          Scaffold a new org-asm project
+  ${cyan('build')}                         Run the full build pipeline
+  ${cyan('gen-builder')} ${dim('<schema.fbs>')}     Generate CommandBuilder from FlatBuffers schema
 
 ${bold('EXAMPLES')}
   npx org-asm init my-app
   cd my-app && npx org-asm build
+  npx org-asm gen-builder schema/commands.fbs -o src/generated/
 `);
 }
 
@@ -256,6 +263,101 @@ Run the full build pipeline:
   if (failed > 0) {
     process.exit(1);
   }
+}
+
+// ─── Gen-builder command ────────────────────────────────────────────────────
+
+async function cmdGenBuilder(gbArgs) {
+  if (gbArgs.includes('--help') || gbArgs.includes('-h')) {
+    console.log(`
+${bold('org-asm gen-builder')} ${dim('<schema.fbs>')}
+
+Generate a CommandBuilder subclass from a FlatBuffers schema file.
+
+${bold('OPTIONS')}
+  ${cyan('<schema.fbs>')}             Path to FlatBuffers schema file (required)
+  ${cyan('-o <outDir>')}              Output directory (default: src/generated/)
+  ${cyan('--name <ClassName>')}       Generated class name (default: {SchemaName}Builder)
+  ${cyan('--framework-import <path>')}  Import path for CommandBuilder (default: org-asm/controller)
+
+${bold('EXAMPLES')}
+  npx org-asm gen-builder schema/commands.fbs
+  npx org-asm gen-builder schema/commands.fbs -o src/generated/ --name CommandsBuilder
+`);
+    process.exit(0);
+  }
+
+  // Parse args
+  let schemaPath = null;
+  let outDir = 'src/generated/';
+  let className = null;
+  let frameworkImport = 'org-asm/controller';
+
+  for (let i = 0; i < gbArgs.length; i++) {
+    const arg = gbArgs[i];
+    if (arg === '-o' && i + 1 < gbArgs.length) {
+      outDir = gbArgs[++i];
+    } else if (arg === '--name' && i + 1 < gbArgs.length) {
+      className = gbArgs[++i];
+    } else if (arg === '--framework-import' && i + 1 < gbArgs.length) {
+      frameworkImport = gbArgs[++i];
+    } else if (!arg.startsWith('-')) {
+      schemaPath = arg;
+    }
+  }
+
+  if (!schemaPath) {
+    console.error(red('Error: schema file path is required.'));
+    console.error(`Usage: ${cyan('npx org-asm gen-builder <schema.fbs>')}`);
+    process.exit(1);
+  }
+
+  const resolvedSchema = resolve(schemaPath);
+  if (!existsSync(resolvedSchema)) {
+    console.error(red(`Error: schema file not found: ${schemaPath}`));
+    process.exit(1);
+  }
+
+  // Derive class name from schema filename if not specified
+  if (!className) {
+    const base = basename(schemaPath, '.fbs');
+    // kebab-case or snake_case → PascalCase
+    className = base
+      .split(/[-_]/)
+      .map((part) => part[0].toUpperCase() + part.slice(1))
+      .join('') + 'Builder';
+  }
+
+  // Import the codegen module
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const codegenPath = join(__dirname, '..', 'codegen', 'generate-builder.mjs');
+  const { parseFbs, generateBuilder } = await import(codegenPath);
+
+  // Parse and generate
+  const source = readFileSync(resolvedSchema, 'utf-8');
+  const schema = parseFbs(source);
+  const output = generateBuilder(schema, { className, frameworkImport });
+
+  // Write output
+  const resolvedOutDir = resolve(outDir);
+  mkdirSync(resolvedOutDir, { recursive: true });
+  const outFile = join(resolvedOutDir, `${className}.ts`);
+  writeFileSync(outFile, output, 'utf-8');
+
+  console.log(`\n${green(bold('Generated'))} ${cyan(outFile)}`);
+  console.log(`  ${dim('Class:')} ${className}`);
+  console.log(`  ${dim('Tables:')} ${schema.tables.map((t) => t.name).join(', ')}`);
+  if (schema.unions.length > 0) {
+    console.log(`  ${dim('Unions:')} ${schema.unions.map((u) => u.name).join(', ')}`);
+  }
+  if (schema.enums.length > 0) {
+    console.log(`  ${dim('Enums:')} ${schema.enums.map((e) => e.name).join(', ')}`);
+  }
+  if (schema.structs.length > 0) {
+    console.log(`  ${dim('Structs:')} ${schema.structs.map((s) => s.name).join(', ')}`);
+  }
+  console.log('');
 }
 
 // ─── Template files ─────────────────────────────────────────────────────────
