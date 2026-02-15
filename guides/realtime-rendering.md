@@ -1,4 +1,4 @@
-# Skill: Real-Time Rendering at 60fps
+# Guide: Real-Time Rendering at 60fps
 
 ## When to Use
 When building UIs that update at 60fps (charts, animations, games, simulations). This is the real-time rendering pattern within orgASM — one of several ways the Rust Model exposes state to the TypeScript View. The core challenge: 60fps data must NEVER trigger React re-renders.
@@ -246,3 +246,7 @@ valueStream.subscribe((value) => store.getState().setValue(value));
 4. **Multiple WASM calls per frame** -- Each boundary crossing has overhead; use one `tick()` call
 5. **Copying chart data every frame** -- Use version-gated copying to skip frames with no new data
 6. **Inline function creation in rAF** -- Define callbacks outside the loop to avoid closure allocations
+
+---
+
+See also: [wasm-engine-pattern](wasm-engine-pattern.md), [data-pipeline](data-pipeline.md), [frame-buffer-design](frame-buffer-design.md)

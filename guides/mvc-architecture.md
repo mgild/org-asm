@@ -1,4 +1,4 @@
-# Skill: WASM+React MVC Architecture
+# Guide: WASM+React MVC Architecture
 
 ## Overview
 
@@ -71,7 +71,7 @@ impl Engine {
 
 **Never does**: DOM manipulation, React state management, WebSocket I/O.
 
-**Framework contracts**: Implements IEngine from `framework/core/interfaces.ts`.
+**Framework contracts**: Implements IEngine from `core/interfaces.ts`.
 
 **Guiding principle**: If logic can be expressed in Rust, it belongs in the Model. Validation, formatting, derived state, business rules, data transforms — all Rust. TypeScript only touches what requires browser APIs.
 
@@ -83,23 +83,23 @@ impl Engine {
 
 **Components**:
 
-1. **AnimationLoop** (`framework/view/AnimationLoop.ts`)
+1. **AnimationLoop** (`view/AnimationLoop.ts`)
    - Calls `engine.tick()` once per frame
    - Distributes the Float64Array to registered consumers
    - Priority-ordered: data sync (0) before effects (10) before React (20)
    - For multi-engine apps, use **MultiAnimationLoop** — single rAF loop with per-engine consumer lists via `EngineHandle<F>`
 
-2. **EffectApplicator** (`framework/view/EffectApplicator.ts`)
+2. **EffectApplicator** (`view/EffectApplicator.ts`)
    - Declarative bindings: map frame offsets to CSS properties
    - Handles custom properties, inline styles, transforms, conditionals
    - Priority 10 -- runs after chart data sync
 
-3. **ChartDataConsumer** (`framework/view/ChartDataConsumer.ts`)
+3. **ChartDataConsumer** (`view/ChartDataConsumer.ts`)
    - Version-gated data copying from WASM
    - Chart-library-agnostic via ChartDataSink interface
    - Priority 0 -- chart data is most latency-sensitive
 
-4. **ThrottledStateSync** (`framework/view/ThrottledStateSync.ts`)
+4. **ThrottledStateSync** (`view/ThrottledStateSync.ts`)
    - Bridges 60fps data to ~10fps React updates
    - Throttled mappings + immediate conditional mappings
    - Optional active flag to skip updates when no session is active
@@ -115,17 +115,17 @@ impl Engine {
 
 **Components**:
 
-1. **WebSocketPipeline** (`framework/controller/WebSocketPipeline.ts`)
+1. **WebSocketPipeline** (`controller/WebSocketPipeline.ts`)
    - Connection management with auto-reconnect
    - Routes raw messages to handlers
    - Decoupled from message parsing (handler does the parsing)
 
-2. **InputController** (`framework/controller/InputController.ts`)
+2. **InputController** (`controller/InputController.ts`)
    - Maps DOM events to engine method calls
    - Named actions with start/end lifecycle
    - Global release listener for mouseup/touchend
 
-3. **WasmBridge** (`framework/controller/WasmBridge.ts`)
+3. **WasmBridge** (`controller/WasmBridge.ts`)
    - Idempotent WASM initialization
    - Engine instance creation by constructor name
 
@@ -277,26 +277,45 @@ const value = useAppStore(s => s.currentValue);
 
 ## File Organization
 ```
-framework/
-  core/
-    types.ts             # FrameFieldDescriptor, TimeSeriesData, CSSEffect
-    interfaces.ts        # IEngine, IAnimationLoop, IFrameConsumer, etc.
-    FrameBuffer.ts       # FrameBufferFactory for type-safe offset access
-    index.ts             # Barrel export
-  model/
-    StoreFactory.ts      # createThrottledStream, createRealtimeStore
-    engine-template.rs   # Rust engine template with step-by-step guide
-    Cargo.template.toml  # Cargo.toml with wasm-bindgen, opt-level z
-    index.ts             # Barrel export
-  view/
-    AnimationLoop.ts     # 60fps loop with consumer registry (single engine)
-    MultiAnimationLoop.ts # Shared rAF loop for multiple engines
-    EffectApplicator.ts  # Declarative DOM effect bindings
-    ChartDataConsumer.ts # Version-gated chart data sync
-    ThrottledStateSync.ts # Throttled React state bridge
-    index.ts             # Barrel export
-  controller/
-    WebSocketPipeline.ts # Auto-reconnecting WebSocket
-    InputController.ts   # DOM event --> engine action mapper
-    WasmBridge.ts        # WASM initialization lifecycle
+core/
+  types.ts             # FrameFieldDescriptor, TimeSeriesData, CSSEffect, WasmResult
+  interfaces.ts        # IEngine, IAnimationLoop, IFrameConsumer, etc.
+  FrameBuffer.ts       # FrameBufferFactory for type-safe offset access
+  index.ts
+model/
+  StoreFactory.ts      # createThrottledStream, createRealtimeStore
+  engine-template.rs   # Rust engine template
+  Cargo.template.toml
+  index.ts
+view/
+  AnimationLoop.ts     # 60fps loop with consumer registry (single engine)
+  MultiAnimationLoop.ts # Shared rAF loop for multiple engines
+  EffectApplicator.ts  # Declarative DOM effect bindings
+  ChartDataConsumer.ts # Version-gated chart data sync
+  ThrottledStateSync.ts # Throttled React state bridge
+  index.ts
+controller/
+  WebSocketPipeline.ts # Auto-reconnecting WebSocket
+  WasmBridge.ts        # WASM initialization lifecycle
+  WorkerBridge.ts      # Frame-oriented off-thread WASM
+  WasmTaskWorker.ts    # Request/response off-thread WASM
+  InputController.ts   # DOM event → engine action mapper
+  index.ts
+react/
+  useWasmCall.ts       # Sync on-demand WASM calls
+  useWasmState.ts      # Reactive state + createNotifier
+  useWasmSelector.ts   # Structural equality variant
+  useAsyncWasmCall.ts  # Async with loading/error
+  useWasmStream.ts     # Streaming chunked results
+  useWasmReducer.ts    # Rust-first state management
+  useFrame.ts          # Throttled frame subscription
+  createWasmContext.ts # Shared engine context
+  WasmErrorBoundary.ts # WASM panic recovery
+  useConnection.ts     # WebSocket/SSE state
+  useWorker.ts         # Off-thread WASM hook
+  index.ts
 ```
+
+---
+
+See also: [wasm-engine-pattern](wasm-engine-pattern.md), [realtime-rendering](realtime-rendering.md), [form-validation](form-validation.md)

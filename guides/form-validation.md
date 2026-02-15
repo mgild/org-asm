@@ -312,3 +312,7 @@ function SymbolField({ engine, symbol }: { engine: OrderFormEngine; symbol: stri
 2. **Validating in React effects** — Don't use `useEffect` to trigger validation. `useWasmCall` runs synchronously when deps change — no extra render cycle.
 3. **Storing errors in React state** — The engine should own error state. Read it via `getSnapshot`, don't duplicate it in `useState`.
 4. **Parsing JSON in the hot path** — For field-level validation called on every keystroke, consider returning simple strings instead of JSON. Reserve JSON for full-form validation with multiple errors.
+
+---
+
+See also: [wasm-engine-pattern](wasm-engine-pattern.md), [mvc-architecture](mvc-architecture.md)

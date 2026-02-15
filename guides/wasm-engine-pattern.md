@@ -1,4 +1,4 @@
-# Skill: WASM Engine Pattern
+# Guide: WASM Engine Pattern
 
 ## When to Use
 When building any application where logic belongs in Rust:
@@ -276,11 +276,11 @@ src/
   store/store.ts      # Zustand (React UI state only, throttled)
   wasm/init.ts        # WASM initialization
 
-framework/
-  core/               # Types, interfaces, FrameBufferFactory
-  model/              # Engine template, StoreFactory
-  view/               # AnimationLoop, EffectApplicator, ChartDataConsumer
-  controller/         # WebSocketPipeline, InputController, WasmBridge
+core/               # Types, interfaces, FrameBufferFactory
+model/              # Engine template, StoreFactory
+view/               # AnimationLoop, EffectApplicator, ChartDataConsumer
+controller/         # WebSocketPipeline, InputController, WasmBridge
+react/              # useWasmCall, useWasmState, useWasmReducer, useFrame, etc.
 ```
 
 ## Concrete Example: Reference Implementation
@@ -293,3 +293,7 @@ The reference implementation demonstrates this pattern with 39 frame buffer fiel
 - Session state: is_active, session_type, entry/threshold/limit values
 
 All 39 values computed in a single `tick()` call, returned as one `Vec<f64>`.
+
+---
+
+See also: [mvc-architecture](mvc-architecture.md), [realtime-rendering](realtime-rendering.md), [frame-buffer-design](frame-buffer-design.md)

@@ -1,4 +1,4 @@
-# Skill: Real-Time Data Pipeline
+# Guide: Real-Time Data Pipeline
 
 ## When to Use
 When connecting real-time data sources (WebSocket, SSE, polling) to WASM engines with React UIs. The pipeline must handle three different update frequencies without them interfering with each other.
@@ -265,3 +265,7 @@ See `guides/wasm-engine-pattern.md` for the full hook table and `guides/form-val
 5. **History loads once** via Float64Array batch, not per-element
 6. **Start animation loop AFTER history loads** -- prevents rendering empty charts
 7. **Config syncs via useEffect** -- runs only when the value actually changes
+
+---
+
+See also: [realtime-rendering](realtime-rendering.md), [mvc-architecture](mvc-architecture.md), [server-engine-pattern](server-engine-pattern.md)

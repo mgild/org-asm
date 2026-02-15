@@ -1,4 +1,4 @@
-# Server Engine Pattern
+# Guide: Server Engine Pattern
 
 How to build a server-side Rust engine that ingests exchange data and broadcasts FlatBuffer frames to browser clients over binary WebSocket.
 
@@ -192,3 +192,7 @@ table OrderbookFrame {
 ```
 
 `PriceLevel` as a `struct` means each level is exactly 16 bytes inline — no pointer indirection, cache-friendly sequential access.
+
+---
+
+See also: [data-pipeline](data-pipeline.md), [mvc-architecture](mvc-architecture.md)

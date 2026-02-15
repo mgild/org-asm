@@ -22,45 +22,22 @@ import { /* animation loops, effect applicators */ } from 'org-asm/view';
 import { /* store factories */ } from 'org-asm/model';
 ```
 
-## Hook Decision Tree
+## Hook Selection
 
-```
-What does the component need?
-
-Real-time animation (60fps)?
-  → useFrame(loop, extract, throttleMs)
-
-Synchronous value from engine (validation, formatting, derived)?
-  → useWasmCall(() => engine.method(args), [deps])
-
-Debounced value from engine (search, autocomplete)?
-  → useDebouncedWasmCall(() => engine.search(query), [query], 200)
-  → Returns T | null (null until first debounced call)
-
-React to external state changes (WebSocket, events)?
-  → useWasmState(notifier, () => engine.snapshot())
-  → Call notifier.notify() after engine mutation
-
-React to external changes but snapshot is an object?
-  → useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.ask() }))
-  → Shallow equality prevents re-renders when values unchanged
-
-Async operation (fetch-in-WASM, worker offload)?
-  → useAsyncWasmCall(() => engine.asyncMethod(args), [deps])
-  → Returns { result, loading, error }
-
-Streaming/chunked results?
-  → useWasmStream((emit) => engine.process(data, emit), [deps])
-  → Returns { chunks, done, error }
-
-Full state management (forms, CRUD, dashboards)?
-  → useWasmReducer(engine, { getSnapshot, dispatch })
-  → Returns [state, dispatch]
-
-Share engine across component tree?
-  → createWasmContext<MyEngine>()
-  → Returns { WasmProvider, useEngine, useNotifier }
-```
+| Scenario | Hook | Signature | Returns |
+|----------|------|-----------|---------|
+| 60fps animation values | `useFrame` | `(loop, extract, ms?)` | `T \| null` |
+| Sync engine call on deps change | `useWasmCall` | `(fn, deps)` | `T` |
+| Debounced engine call | `useDebouncedWasmCall` | `(fn, deps, ms)` | `T \| null` |
+| React to external state (primitives) | `useWasmState` | `(notifier, getSnapshot)` | `T` |
+| React to external state (objects) | `useWasmSelector` | `(notifier, getSnapshot, isEqual?)` | `T` |
+| Async operation (Promise) | `useAsyncWasmCall` | `(fn, deps)` | `{ result, loading, error }` |
+| Streaming/chunked results | `useWasmStream` | `(fn, deps)` | `{ chunks, done, error }` |
+| Full state management (no tick loop) | `useWasmReducer` | `(engine, config)` | `[S, dispatch]` |
+| Share engine across component tree | `createWasmContext` | `<E>()` | `{ WasmProvider, useEngine, useNotifier }` |
+| Catch WASM panics | `WasmErrorBoundary` | component | Renders fallback on error |
+| WebSocket/SSE connection | `useConnection` | `(config)` | `{ pipeline, connected, state, error, stale }` |
+| Off-thread WASM (frame-oriented) | `useWorker` | `(config)` | `{ loop, bridge, ready, error }` |
 
 ## Common Patterns
 
@@ -147,6 +124,39 @@ const [state, dispatch] = useWasmReducer(engine, {
 });
 ```
 
+### Search with debounce
+```ts
+const results = useDebouncedWasmCall(
+  () => engine.search(query, 20),
+  [query],
+  200,
+);
+```
+
+### Object snapshot without re-render churn
+```ts
+// BAD: re-renders every notify() because new object each time
+const book = useWasmState(notifier, () => ({ bid: engine.bid(), ask: engine.ask() }));
+
+// GOOD: shallow equality skips re-render when values unchanged
+const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.ask() }));
+```
+
+## Anti-Patterns
+
+| Never Do | Instead |
+|----------|---------|
+| Business logic in TypeScript | Put in Rust engine |
+| `useState` for 60fps data | `useFrame` with throttling, or module-level vars |
+| Multiple WASM calls per frame | One `tick()` returns everything via FlatBuffer |
+| Duplicate state in JS | Engine is single source of truth |
+| `useEffect` for validation | `useWasmCall` (sync, no extra render) |
+| Store errors in React state | Read from engine via `getSnapshot` |
+| `JSON.parse` in WASM | Parse in JS (native C++), pass primitives |
+| Allocate in animation loop | Pre-allocate buffers, reuse per frame |
+| `useWasmState` with object snapshots | `useWasmSelector` (shallow equality) |
+| Raw `notify()` in tight loops | `notifier.batch(() => { ... })` |
+
 ## File Map
 
 ### Hooks (`react/`)
@@ -202,17 +212,6 @@ const [state, dispatch] = useWasmReducer(engine, {
 | `IAnimationLoop<F>` | Loop contract (start, stop, addConsumer) |
 | `IFrameConsumer<F>` | Per-frame callback with priority ordering |
 
-## Anti-Patterns (Never Do)
-
-1. **Business logic in TypeScript** — Validation, state machines, derived values, formatting belong in the Rust engine
-2. **useState for 60fps data** — Use module-level variables or useFrame with throttling
-3. **Multiple WASM calls per frame** — One `tick()` returns everything via FlatBuffer
-4. **Duplicating state in JS** — Engine is the single source of truth
-5. **useEffect for validation** — Use useWasmCall (synchronous, no extra render cycle)
-6. **Storing errors in React state** — Read error state from engine via getSnapshot
-7. **JSON.parse in WASM** — Parse in JS (native C++), pass primitives to engine
-8. **Allocations in animation loop** — Pre-allocate buffers, reuse per frame
-
 ## Guides (Read Order)
 
 1. `guides/mvc-architecture.md` — Architecture overview, layer responsibilities
@@ -254,6 +253,49 @@ impl Engine {
     pub fn close_action(&mut self, now_ms: f64) -> f64 { ... }
 }
 ```
+
+## Generating Rust Engine Code
+
+When creating a new engine, follow this template:
+
+```rust
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+pub struct MyEngine {
+    // ALL mutable state here — never in JS
+    data_version: u32,
+}
+
+#[wasm_bindgen]
+impl MyEngine {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> MyEngine {
+        MyEngine { data_version: 0 }
+    }
+
+    // Mutators bump data_version so useWasmState/useWasmSelector re-read
+    pub fn set_value(&mut self, v: f64) {
+        // ... mutate state ...
+        self.data_version += 1;
+    }
+
+    // Snapshots are &self (read-only) — called from getSnapshot
+    pub fn value(&self) -> f64 { 0.0 }
+    pub fn data_version(&self) -> u32 { self.data_version }
+
+    // Validation returns JSON string for WasmResult parsing
+    pub fn validate_field(&self, field: &str, value: &str) -> String {
+        String::new()
+    }
+}
+```
+
+Key rules:
+- `&mut self` methods = mutations (called from dispatch/handlers)
+- `&self` methods = snapshots (called from getSnapshot/useWasmCall)
+- Bump `data_version` on every state change
+- Return simple types (f64, u32, String, bool) -- not structs
 
 ## CLI Commands
 

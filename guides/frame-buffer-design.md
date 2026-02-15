@@ -1,4 +1,4 @@
-# Skill: Frame Buffer Design
+# Guide: Frame Buffer Design
 
 ## When to Use
 When designing the `tick()` return value for a WASM engine. This is the contract between Rust and TypeScript -- getting it right is critical because both sides must agree on offsets.
@@ -195,3 +195,7 @@ effects.bind('result', resultElement);
 5. Read `frame[F.NEW_FIELD]` in the render code
 
 Keep both sides in the same commit to prevent drift.
+
+---
+
+See also: [wasm-engine-pattern](wasm-engine-pattern.md), [realtime-rendering](realtime-rendering.md)
