@@ -302,35 +302,38 @@ Use `--no-sender` to skip sender+hook generation, or `--no-hook` to skip just th
 
 ### 6b. Await Command Responses
 
-The `Async` variants require a `ResponseRegistry` to correlate responses by command ID:
+The `Async` variants require a `ResponseRegistry` to correlate responses by command ID. The `useResponseRegistry` hook handles all wiring:
 
 ```ts
-import { ResponseRegistry } from 'org-asm/controller';
+import { WebSocketPipeline } from 'org-asm/controller';
+import { useConnection, useResponseRegistry } from 'org-asm/react';
 import { useCommands } from './generated/useCommands';
 
-// Create a registry with an ID extractor for your response schema
-const registry = new ResponseRegistry(
-  (data) => {
-    const msg = ResponseMessage.getRootAsResponseMessage(
-      new ByteBuffer(new Uint8Array(data)),
-    );
-    return msg.id(); // must return bigint | null
-  },
-  5000, // timeout in ms (default 5000)
-);
+// Create pipeline explicitly so both hooks can share it
+const ws = useMemo(() => new WebSocketPipeline({ url: 'wss://...' }), []);
+const { connected } = useConnection(ws);
 
-// Wire as interceptor: responses are consumed, frames pass through
-pipeline.onBinaryMessage((data) => {
-  if (!registry.handleMessage(data)) {
-    parser.ingestFrame(data); // not a response → normal frame
-  }
+// Wire registry — intercepts binary messages, rejects on disconnect
+const registry = useResponseRegistry(ws, extractId, {
+  onMessage: (data) => parser.ingestFrame(data), // non-response frames
 });
-pipeline.onDisconnect(() => registry.rejectAll('Connection lost'));
 
-// Pass registry to the hook (or sender constructor)
-const commands = useCommands(pipeline, registry);
+const commands = useCommands(ws, registry);
 const response = await commands.subscribeAsync({ symbol: 'ETH-USD' });
 ```
+
+The `extractId` function reads the command ID from your response schema:
+
+```ts
+const extractId = (data: ArrayBuffer) => {
+  const msg = ResponseMessage.getRootAsResponseMessage(
+    new ByteBuffer(new Uint8Array(data)),
+  );
+  return msg.id(); // bigint | null
+};
+```
+
+For manual wiring without the hook, use `ResponseRegistry` directly from `org-asm/controller`.
 
 ### 6c. Server-Side Command Handler (Rust)
 
@@ -417,6 +420,7 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
 | `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
 | `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
+| `useResponseRegistry(pipeline, extractId, options?)` | `ResponseRegistry \| null` | Wire response correlation onto a WebSocketPipeline with interceptor + disconnect cleanup |
 
 ### Core
 

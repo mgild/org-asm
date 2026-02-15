@@ -4,3 +4,4 @@ export { useFrame } from './useFrame';
 export { useConnection } from './useConnection';
 export { useWorker } from './useWorker';
 export type { UseWorkerConfig } from './useWorker';
+export { useResponseRegistry } from './useResponseRegistry';
