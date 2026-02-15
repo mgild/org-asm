@@ -359,7 +359,8 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useWasm(initFn)` | `{ memory, ready, error }` | Initialize WASM module, track loading state |
 | `useAnimationLoop(engine, memory, rootFn)` | `AnimationLoop \| null` | Create 60fps loop with FlatBuffer adapter |
 | `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
-| `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket with full connection state, error, and staleness tracking |
+| `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
+| `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
 
 ### Core
 
@@ -432,6 +433,60 @@ Feeds binary FlatBuffer frames from a server engine to a WASM client engine via 
 #### `CommandBuilder` / `CommandSender<B>`
 
 Two-class pattern for typed commands. Extend `CommandBuilder` with instance methods wrapping generated FlatBuffer statics (`b.startX()` instead of `X.startX(builder)`). Extend `CommandSender<B>` with typed command methods. Builder reuse, auto-incrementing IDs.
+
+#### `SSEPipeline`
+
+Auto-reconnecting Server-Sent Events pipeline implementing `IConnectionPipeline`. Same state machine, backoff, and staleness tracking as `WebSocketPipeline`. Read-only transport — `send()` is a no-op for Liskov substitutability.
+
+**Config:** `url`, `eventTypes` (default `['message']`), `withCredentials`, plus same reconnect/staleness config as WS.
+
+**Limitation:** `EventSource` does not support custom headers. Use URL query parameters or cookies for authentication.
+
+**Swapping transports:**
+```ts
+// WebSocket path
+const { pipeline, connected } = useConnection({ url: 'wss://...' });
+
+// SSE path — same hook, same result shape
+const sse = useMemo(() => new SSEPipeline({ url: '/events' }), []);
+const { pipeline, connected } = useConnection(sse);
+```
+
+Both `WebSocketPipeline` and `SSEPipeline` implement `IConnectionPipeline`, so `useConnection()` accepts either.
+
+#### `WorkerBridge`
+
+Main-thread coordinator for off-main-thread WASM computation. Spawns a Worker, sends it a `SharedArrayBuffer`, and manages the lifecycle. The Worker runs the WASM engine on `setInterval` (~60fps) and writes frames into the SAB. The main thread reads the latest frame on each `requestAnimationFrame` tick — zero `postMessage` overhead per frame.
+
+**Requires COOP/COEP headers** for `SharedArrayBuffer`:
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+**Quick start (Worker path):**
+```tsx
+import { useWorker, useFrame } from 'org-asm/react';
+
+const { loop, bridge, ready } = useWorker({
+  workerUrl: new URL('./my-worker.ts', import.meta.url),
+  frameSize: 39,
+  wasmUrl: './pkg/my_engine_bg.wasm',
+  engineConstructor: 'MyEngine',
+});
+
+const intensity = useFrame(loop, f => f[0], 100);
+```
+
+#### `SharedBufferTickSource`
+
+Factory functions for creating tick sources that read from `SharedArrayBuffer`:
+
+| Factory | Mode | Description |
+|---------|------|-------------|
+| `sharedBufferTickSource(buffer, frameSize)` | Float64Array | Zero-copy subarray view into SAB |
+| `sharedBufferFlatBufferTickSource(buffer, maxBytes, rootFn)` | FlatBuffer | Copy + deserialize from SAB |
+| `withSequenceTracking(source, buffer)` | Wrapper | Adds `.newFrame` boolean per tick |
 
 #### `InputController`
 
@@ -507,9 +562,9 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] Connection state machine, exponential backoff, error surfacing
 - [x] Staleness tracking and binary backpressure (rAF coalescing)
 - [x] `RequestSnapshot` command for gap-free reconnection
+- [x] Worker thread support for off-main-thread computation (`WorkerBridge` + `SharedBufferTickSource` + `useWorker`)
+- [x] SSE/EventSource pipeline alongside WebSocket (`SSEPipeline` + `IConnectionPipeline`)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
-- [ ] Worker thread support for off-main-thread computation
-- [ ] SSE/EventSource pipeline alongside WebSocket
 - [ ] Benchmark suite
 
 ## License

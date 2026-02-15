@@ -1,6 +1,31 @@
+// Connection types (shared interface)
+export type { IConnectionPipeline, MessageHandler, ConnectionHandler, StateChangeHandler, ErrorHandler } from './connectionTypes';
+
+// WebSocket pipeline
 export { WebSocketPipeline, ConnectionState } from './WebSocketPipeline';
-export type { WebSocketConfig, MessageHandler, BinaryMessageHandler, ConnectionHandler, StateChangeHandler, ErrorHandler, ConnectionError } from './WebSocketPipeline';
+export type { WebSocketConfig, BinaryMessageHandler, ConnectionError } from './WebSocketPipeline';
+
+// SSE pipeline
+export { SSEPipeline } from './SSEPipeline';
+export type { SSEConfig } from './SSEPipeline';
+
+// WASM bridge (non-worker path)
 export { WasmBridge, zeroCopyTickAdapter, zeroCopyArrayView } from './WasmBridge';
+
+// Worker bridge (off-main-thread path)
+export { WorkerBridge } from './WorkerBridge';
+export type { WorkerBridgeConfig, MainToWorkerMessage, WorkerToMainMessage } from './WorkerBridge';
+
+// Shared buffer tick sources
+export {
+  sharedBufferTickSource,
+  sharedBufferFlatBufferTickSource,
+  withSequenceTracking,
+  computeBufferSize,
+  computeFlatBufferBufferSize,
+} from './SharedBufferTickSource';
+
+// Input + parsing + commands
 export { InputController } from './InputController';
 export type { ActionHandlers, ActionEndCallback } from './InputController';
 export { MessageParser, WasmIngestParser, BinaryFrameParser } from './MessageParser';
