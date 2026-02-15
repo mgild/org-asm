@@ -86,6 +86,27 @@ streaming:  useWasmStream()                        (large dataset processing, pr
 
 Real-time paths use the frame buffer and direct DOM writes — React never sees 60fps data. Throttled snapshots reach React at ~10fps. On-demand calls (validation, computation) return results directly.
 
+---
+
+## Which Hook?
+
+| I want to... | Use | Returns |
+|---|---|---|
+| Read WASM state at 60fps | `useFrame` | `T \| null` |
+| Call engine on deps change | `useWasmCall` | `T` |
+| Debounce engine calls | `useDebouncedWasmCall` | `T \| null` |
+| React to external mutations | `useWasmState` | `T` |
+| ...same but with objects | `useWasmSelector` | `T` |
+| Run async WASM operation | `useAsyncWasmCall` | `{ result, loading, error }` |
+| Stream chunked results | `useWasmStream` | `{ chunks, done, error }` |
+| Full state management | `useWasmReducer` | `[S, dispatch]` |
+| Share engine across tree | `createWasmContext` | `{ WasmProvider, useEngine, useNotifier }` |
+| Catch WASM panics | `WasmErrorBoundary` | React component |
+| Manage WebSocket/SSE | `useConnection` | `{ pipeline, connected, state, error, stale }` |
+| Off-thread WASM | `useWorker` | `{ loop, bridge, ready, error }` |
+
+---
+
 ## Install
 
 ```bash
@@ -317,7 +338,7 @@ Fields with schema defaults (e.g. `depth: uint16 = 20`) become optional in the g
 
 Use `--no-sender` to skip sender+hook generation, or `--no-hook` to skip just the hook.
 
-### 6b. Await Command Responses
+### 7. Await Command Responses
 
 The `Async` variants require a `ResponseRegistry` to correlate responses by command ID. The `useResponseRegistry` hook installs a binary middleware interceptor and handles disconnect cleanup:
 
@@ -355,7 +376,7 @@ const extractId = (data: ArrayBuffer) => {
 };
 ```
 
-### 6b-2. Auto-Replay Subscriptions on Reconnect
+### 8. Auto-Replay Subscriptions on Reconnect
 
 Use `SubscriptionManager` (or the `useSubscriptionManager` hook) to automatically replay subscribe commands when the connection drops and reconnects:
 
@@ -373,7 +394,7 @@ subs?.remove('BTC-USD');
 commands.unsubscribe({ symbol: 'BTC-USD' });
 ```
 
-### 6c. Server-Side Command Handler (Rust)
+### 9. Server-Side Command Handler (Rust)
 
 Generate a Rust trait + dispatch function from your command schema:
 
@@ -410,7 +431,7 @@ if let Some(response) = dispatch_command(bytes, &mut engine) {
 
 Options: `--name <TraitName>` (default `{UnionName}Handler`), `--crate-path <path>` (default `crate::generated::{namespace}::*`).
 
-### 7. Shared Rust Crate
+### 10. Shared Rust Crate
 
 Keep domain types, validation, and constants in a shared crate used by both server and WASM engines:
 
@@ -439,7 +460,7 @@ Both server and WASM crates import this:
 my-shared = { path = "../shared" }
 ```
 
-### 8. Build Everything
+### 11. Build Everything
 
 ```bash
 npx org-asm build
@@ -451,22 +472,39 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 
 ### React Hooks (`org-asm/react`)
 
+#### WASM Data Hooks
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
+| `useWasmCall(fn, deps)` | `T` | Synchronous on-demand WASM call (validation, formatting, derived values) |
+| `useDebouncedWasmCall(fn, deps, ms)` | `T \| null` | Debounced WASM call for search/autocomplete (fires after quiet period) |
+| `useWasmState(notifier, getSnapshot)` | `T` | Reactive WASM state via `useSyncExternalStore` — re-reads on `notify()` |
+| `useWasmSelector(notifier, snap, isEqual?)` | `T` | Like `useWasmState` but with structural equality — prevents re-renders for object snapshots |
+
+#### Async & Streaming
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useAsyncWasmCall(fn, deps)` | `{ result, loading, error }` | Async WASM call with cancellation (wasm-bindgen-futures or worker offload) |
+| `useWasmStream(fn, deps)` | `{ chunks, done, error }` | Streaming chunked results from WASM with rAF-batched updates |
+
+#### State Management
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useWasmReducer(engine, config)` | `[S, dispatch]` | Rust-first state management — engine owns state, dispatch triggers mutation + re-render |
+| `createWasmContext<E>()` | `{ WasmProvider, useEngine, useNotifier }` | Factory for sharing engine + notifier across component tree without prop drilling |
+| `WasmErrorBoundary` | React component | Error boundary for WASM panics — catches errors, shows fallback, supports reset |
+
+#### Connection & Infrastructure
+
 | Hook | Returns | Description |
 |------|---------|-------------|
 | `useWasm(initFn)` | `{ memory, ready, error }` | Initialize WASM module, track loading state |
 | `useAnimationLoop(engine, memory, rootFn)` | `AnimationLoop \| null` | Create 60fps loop with FlatBuffer adapter |
 | `useEngine(loop, engine, memory, rootFn)` | `EngineHandle \| null` | Register a FlatBuffer engine on a shared `MultiAnimationLoop` |
 | `useEngine(loop, tickSource)` | `EngineHandle \| null` | Register a raw tick source on a shared `MultiAnimationLoop` |
-| `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
-| `useWasmCall(fn, deps)` | `T` | Synchronous on-demand WASM call (validation, formatting, derived values) |
-| `useDebouncedWasmCall(fn, deps, ms)` | `T \| null` | Debounced WASM call for search/autocomplete (fires after quiet period) |
-| `useWasmState(notifier, getSnapshot)` | `T` | Reactive WASM state via `useSyncExternalStore` — re-reads on `notify()` |
-| `useWasmSelector(notifier, snap, isEqual?)` | `T` | Like `useWasmState` but with structural equality — prevents re-renders for object snapshots |
-| `useAsyncWasmCall(fn, deps)` | `{ result, loading, error }` | Async WASM call with cancellation (wasm-bindgen-futures or worker offload) |
-| `useWasmStream(fn, deps)` | `{ chunks, done, error }` | Streaming chunked results from WASM with rAF-batched updates |
-| `useWasmReducer(engine, config)` | `[S, dispatch]` | Rust-first state management — engine owns state, dispatch triggers mutation + re-render |
-| `createWasmContext<E>()` | `{ WasmProvider, useEngine, useNotifier }` | Factory for sharing engine + notifier across component tree without prop drilling |
-| `WasmErrorBoundary` | React component | Error boundary for WASM panics — catches errors, shows fallback, supports reset |
 | `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
 | `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
 | `useResponseRegistry(pipeline, extractId, options?)` | `ResponseRegistry<R> \| null` | Wire response correlation as binary middleware + disconnect cleanup |
@@ -726,33 +764,8 @@ Template for processing client commands (subscribe/unsubscribe). See `server/com
 
 Zero DOM library dependencies. Works with any chart library via `ChartDataSink`, any React version via hooks.
 
-## Roadmap
+## Status
 
-- [x] FlatBuffers integration with `flatc` codegen
-- [x] Server engine support (Rust/Axum with FlatBuffer broadcast)
-- [x] Binary WebSocket pipeline (`BinaryFrameParser` + `onBinaryMessage`)
-- [x] React hooks (`useWasm`, `useAnimationLoop`, `useEngine`, `useFrame`, `useConnection`)
-- [x] CLI scaffolding (`npx org-asm init`)
-- [x] Build tooling (`npx org-asm build`)
-- [x] Shared Rust crate template for server + WASM
-- [x] Bidirectional commands (`CommandSender` + `commands.fbs`)
-- [x] Connection state machine, exponential backoff, error surfacing
-- [x] Staleness tracking and binary backpressure (rAF coalescing)
-- [x] `RequestSnapshot` command for gap-free reconnection
-- [x] Worker thread support for off-main-thread computation (`WorkerBridge` + `SharedBufferTickSource` + `useWorker`)
-- [x] SSE/EventSource pipeline alongside WebSocket (`SSEPipeline` + `IConnectionPipeline`)
-- [x] Response correlation (`ResponseRegistry` + async command variants)
-- [x] Server-side Rust codegen (`gen-handler` — trait + dispatch from `.fbs`)
-- [x] Binary middleware chain (`pipeline.use()` — composable interceptors)
-- [x] WebSocket heartbeat (configurable keepalive interval)
-- [x] Typed async responses (`ResponseRegistry<R>` + deserialize)
-- [x] Reconnect resubscribe (`SubscriptionManager` + `useSubscriptionManager`)
-- [x] DevTools panel (`OrgAsmDevTools` + `useOrgAsmDiagnostics`)
-- [x] Multi-engine shared animation loop (`MultiAnimationLoop` + `useEngine`)
-- [x] On-demand WASM hooks (`useWasmCall`, `useWasmState`, `useAsyncWasmCall`, `useWasmStream`)
-- [x] Task worker for one-off computation (`WasmTaskWorker` + `task-worker-entry`)
-- [x] Shared engine context (`createWasmContext`) and reducer pattern (`useWasmReducer`)
-- [x] Production hardening (`useWasmSelector`, `useDebouncedWasmCall`, `WasmErrorBoundary`, batch notifications)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Benchmark suite
 
