@@ -82,6 +82,7 @@ impl Engine {
    - Calls `engine.tick()` once per frame
    - Distributes the Float64Array to registered consumers
    - Priority-ordered: data sync (0) before effects (10) before React (20)
+   - For multi-engine apps, use **MultiAnimationLoop** — single rAF loop with per-engine consumer lists via `EngineHandle<F>`
 
 2. **EffectApplicator** (`framework/view/EffectApplicator.ts`)
    - Declarative bindings: map frame offsets to CSS properties
@@ -228,7 +229,8 @@ framework/
     Cargo.template.toml  # Cargo.toml with wasm-bindgen, opt-level z
     index.ts             # Barrel export
   view/
-    AnimationLoop.ts     # 60fps loop with consumer registry
+    AnimationLoop.ts     # 60fps loop with consumer registry (single engine)
+    MultiAnimationLoop.ts # Shared rAF loop for multiple engines
     EffectApplicator.ts  # Declarative DOM effect bindings
     ChartDataConsumer.ts # Version-gated chart data sync
     ThrottledStateSync.ts # Throttled React state bridge

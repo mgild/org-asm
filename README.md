@@ -438,6 +438,8 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 |------|---------|-------------|
 | `useWasm(initFn)` | `{ memory, ready, error }` | Initialize WASM module, track loading state |
 | `useAnimationLoop(engine, memory, rootFn)` | `AnimationLoop \| null` | Create 60fps loop with FlatBuffer adapter |
+| `useEngine(loop, engine, memory, rootFn)` | `EngineHandle \| null` | Register a FlatBuffer engine on a shared `MultiAnimationLoop` |
+| `useEngine(loop, tickSource)` | `EngineHandle \| null` | Register a raw tick source on a shared `MultiAnimationLoop` |
 | `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
 | `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket/SSE with full connection state, error, and staleness tracking |
 | `useWorker(config)` | `{ loop, bridge, ready, error }` | Off-main-thread WASM via Worker + SharedArrayBuffer |
@@ -469,6 +471,22 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 #### `AnimationLoop`
 
 60fps `requestAnimationFrame` loop. Calls `engine.tick()` once per frame, distributes the frame to consumers in priority order.
+
+#### `MultiAnimationLoop`
+
+Single `requestAnimationFrame` loop that ticks multiple engines. Each engine gets its own typed consumer list via `EngineHandle<F>`, which implements `IAnimationLoop<F>` and works as a drop-in for `AnimationLoop` with `useFrame()` and other consumer hooks. Use when an app has multiple independent engines (e.g. orderbook + chart + analytics) to avoid N separate rAF callbacks.
+
+```tsx
+const loop = new MultiAnimationLoop();
+
+// In component A
+const obHandle = useEngine(loop, obEngine, obMemory, parseOb);
+const bid = useFrame(obHandle, f => f.bestBid());
+
+// In component B (same loop instance via props or context)
+const chartHandle = useEngine(loop, chartEngine, chartMemory, parseChart);
+const price = useFrame(chartHandle, f => f.price());
+```
 
 #### `EffectApplicator` (priority: 10)
 
@@ -673,7 +691,7 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] FlatBuffers integration with `flatc` codegen
 - [x] Server engine support (Rust/Axum with FlatBuffer broadcast)
 - [x] Binary WebSocket pipeline (`BinaryFrameParser` + `onBinaryMessage`)
-- [x] React hooks (`useWasm`, `useAnimationLoop`, `useFrame`, `useConnection`)
+- [x] React hooks (`useWasm`, `useAnimationLoop`, `useEngine`, `useFrame`, `useConnection`)
 - [x] CLI scaffolding (`npx org-asm init`)
 - [x] Build tooling (`npx org-asm build`)
 - [x] Shared Rust crate template for server + WASM
@@ -690,6 +708,7 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] Typed async responses (`ResponseRegistry<R>` + deserialize)
 - [x] Reconnect resubscribe (`SubscriptionManager` + `useSubscriptionManager`)
 - [x] DevTools panel (`OrgAsmDevTools` + `useOrgAsmDiagnostics`)
+- [x] Multi-engine shared animation loop (`MultiAnimationLoop` + `useEngine`)
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Benchmark suite
 

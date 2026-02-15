@@ -75,6 +75,21 @@ loop.addConsumer(throttledStateSync);  // priority 20 (React last)
 loop.start();
 ```
 
+For multiple engines, use MultiAnimationLoop to share a single rAF:
+
+```ts
+import { MultiAnimationLoop } from '../framework/view/MultiAnimationLoop';
+
+const shared = new MultiAnimationLoop();
+const obHandle = shared.addEngine(obTickSource);
+const chartHandle = shared.addEngine(chartTickSource);
+
+obHandle.addConsumer(obChartConsumer);
+chartHandle.addConsumer(priceEffects);
+
+shared.start(); // one rAF ticks both engines
+```
+
 ## Pattern 3: Versioned Data Copy
 Copy chart data from WASM only when the data version changes. This prevents copying large Float64Arrays on frames where no new data arrived:
 
