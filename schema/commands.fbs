@@ -25,7 +25,9 @@ table Unsubscribe {
   symbol: string;
 }
 
-union Command { Subscribe, Unsubscribe }
+table RequestSnapshot {}
+
+union Command { Subscribe, Unsubscribe, RequestSnapshot }
 
 table CommandMessage {
   id: uint64;

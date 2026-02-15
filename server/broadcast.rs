@@ -97,11 +97,42 @@ pub async fn ws_handler(
 ///
 /// If the client falls behind (broadcast channel lags), we skip ahead
 /// to the latest frame rather than disconnecting.
+///
+/// ## Snapshot-on-connect (gap-free startup)
+///
+/// To ensure clients receive complete state on connect without missing
+/// frames, subscribe to broadcast FIRST, then send a snapshot, then enter
+/// the forward loop. Because the subscription is created before the
+/// snapshot is sent, any frames produced during snapshot serialization
+/// are buffered in the broadcast channel and forwarded after the snapshot.
+///
+/// ```rust
+/// // 1. Subscribe BEFORE snapshot — no frames can be missed
+/// let mut rx = state.subscribe();
+///
+/// // 2. Send snapshot (full current state)
+/// // if let Some(snapshot) = engine.lock().await.snapshot(&mut builder) {
+/// //     ws_tx.send(Message::Binary(snapshot.into())).await.ok();
+/// // }
+///
+/// // 3. Enter forward loop — buffered frames delivered in order
+/// ```
 async fn handle_client(socket: WebSocket, state: BroadcastState) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     let mut rx = state.subscribe();
 
     info!("Client connected");
+
+    // --- Snapshot-on-connect template ---
+    // Uncomment to send full state snapshot before forwarding live frames.
+    // The broadcast subscription is already active, so no gap is possible.
+    //
+    // if let Some(snapshot) = engine.lock().await.snapshot(&mut builder) {
+    //     if ws_tx.send(Message::Binary(snapshot.into())).await.is_err() {
+    //         info!("Client disconnected during snapshot");
+    //         return;
+    //     }
+    // }
 
     loop {
         tokio::select! {

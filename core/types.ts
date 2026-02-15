@@ -76,3 +76,23 @@ export interface CSSEffect {
 export const INGEST_DATA_UPDATED = 1;
 export const INGEST_STATS_UPDATED = 2;
 
+// ============================================
+// Connection state types
+// ============================================
+
+/** WebSocket connection state machine states */
+export enum ConnectionState {
+  Disconnected = 'disconnected',
+  Connecting = 'connecting',
+  Connected = 'connected',
+  Reconnecting = 'reconnecting',
+}
+
+/** Structured connection error surfaced via onError handler */
+export interface ConnectionError {
+  readonly type: 'connect_failed' | 'connection_lost' | 'max_retries_exhausted';
+  readonly message: string;
+  readonly attempt: number;
+  readonly timestamp: number;
+}
+

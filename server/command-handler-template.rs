@@ -110,6 +110,9 @@ pub fn handle_client_message(
     //         let unsub = msg.command_as_unsubscribe().unwrap();
     //         handle_unsubscribe(id, unsub, state)
     //     }
+    //     Command::RequestSnapshot => {
+    //         handle_request_snapshot(id, state)
+    //     }
     //     Command::NONE => {
     //         warn!("Command {id}: empty command union");
     //         None
@@ -184,6 +187,30 @@ fn handle_subscribe(
     // Example:
     // engine.lock().await.add_subscription(symbol, depth);
 
+    None
+}
+
+/// Handle a RequestSnapshot command.
+///
+/// The client requests a full state snapshot, typically after reconnecting.
+/// Delegates to `engine.snapshot()` which serializes the complete current
+/// state into a FlatBuffer response. The caller sends this response back
+/// to the requesting client only (not broadcast).
+///
+/// Returns the snapshot bytes, or None if the engine has no state to send.
+fn handle_request_snapshot(
+    id: u64,
+    state: &mut ClientState,
+) -> Option<Vec<u8>> {
+    info!("Command {id}: request snapshot");
+
+    // Build a full state snapshot from the engine.
+    // let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(4096);
+    // if let Some(snapshot) = engine.snapshot(&mut builder) {
+    //     return Some(snapshot);
+    // }
+
+    let _ = state;
     None
 }
 

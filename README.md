@@ -182,8 +182,8 @@ function App() {
   // React re-renders at 10fps with the latest intensity
   const intensity = useFrame(loop, f => f.intensity(), 100);
 
-  // Connection state
-  const { pipeline, connected } = useConnection({
+  // Connection state with error + staleness tracking
+  const { pipeline, connected, state, error, stale } = useConnection({
     url: 'wss://your-source/ws',
     binaryType: 'arraybuffer',
   });
@@ -197,7 +197,8 @@ function App() {
   return (
     <div>
       <div style={{ opacity: intensity ?? 0 }}>Value: {intensity?.toFixed(2)}</div>
-      <span>{connected ? 'Live' : 'Reconnecting...'}</span>
+      <span>{connected ? (stale ? 'Stale' : 'Live') : `Reconnecting... (${state})`}</span>
+      {error && <span style={{ color: 'red' }}>{error.message}</span>}
     </div>
   );
 }
@@ -358,7 +359,7 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useWasm(initFn)` | `{ memory, ready, error }` | Initialize WASM module, track loading state |
 | `useAnimationLoop(engine, memory, rootFn)` | `AnimationLoop \| null` | Create 60fps loop with FlatBuffer adapter |
 | `useFrame(loop, extract, throttleMs?)` | `T \| null` | Throttled frame value subscription (default 100ms) |
-| `useConnection(config)` | `{ pipeline, connected }` | WebSocket with connection state tracking |
+| `useConnection(config)` | `{ pipeline, connected, state, error, stale }` | WebSocket with full connection state, error, and staleness tracking |
 
 ### Core
 
@@ -408,7 +409,17 @@ Bridges 60fps frame data to React at configurable intervals.
 
 #### `WebSocketPipeline`
 
-Auto-reconnecting WebSocket with binary + text message support, `send()` / `sendBinary()` for bidirectional communication.
+Auto-reconnecting WebSocket with state machine, exponential backoff with jitter, staleness tracking, optional binary backpressure (rAF coalescing), and structured error surfacing. Supports binary + text messages and `send()` / `sendBinary()` for bidirectional communication.
+
+**Connection state:** `ConnectionState` enum — `Disconnected` → `Connecting` → `Connected` → `Reconnecting` (on drop). Access via `pipeline.state`.
+
+**Backoff:** Exponential with jitter. Base 1s, caps at 30s. Configure via `reconnectDelayMs` / `maxReconnectDelayMs`.
+
+**Staleness:** `pipeline.stale` returns true when no message received within `staleThresholdMs` (default 5s). `pipeline.lastMessageTime` returns the raw timestamp.
+
+**Backpressure:** Set `backpressure: true` to coalesce binary frames via `requestAnimationFrame` (latest-wins). Text messages pass through immediately.
+
+**Error surfacing:** `pipeline.onError(handler)` fires `ConnectionError` with type (`connect_failed` | `connection_lost` | `max_retries_exhausted`), attempt count, and timestamp.
 
 #### `WasmIngestParser`
 
@@ -493,6 +504,9 @@ Zero DOM library dependencies. Works with any chart library via `ChartDataSink`,
 - [x] Build tooling (`npx org-asm build`)
 - [x] Shared Rust crate template for server + WASM
 - [x] Bidirectional commands (`CommandSender` + `commands.fbs`)
+- [x] Connection state machine, exponential backoff, error surfacing
+- [x] Staleness tracking and binary backpressure (rAF coalescing)
+- [x] `RequestSnapshot` command for gap-free reconnection
 - [ ] Example apps (orderbook dashboard, sensor monitor)
 - [ ] Worker thread support for off-main-thread computation
 - [ ] SSE/EventSource pipeline alongside WebSocket
