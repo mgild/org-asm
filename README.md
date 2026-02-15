@@ -286,16 +286,12 @@ class MyCommands extends CommandSender<CommandsBuilder> {
   subscribe(symbol: string, depth = 20): bigint {
     return this.send(b => {
       const sym = b.createString(symbol);
-      b.subscribe.start();
-      b.subscribe.addSymbol(sym);
-      b.subscribe.addDepth(depth);
-      const sub = b.subscribe.end();
-
-      b.commandMessage.start();
-      b.commandMessage.addId(b.id);
-      b.commandMessage.addCommandType(Command.Subscribe);
-      b.commandMessage.addCommand(sub);
-      return b.commandMessage.end();
+      const sub = b.subscribe.start().addSymbol(sym).addDepth(depth).end();
+      return b.commandMessage.start()
+        .addId(b.id)
+        .addCommandType(Command.Subscribe)
+        .addCommand(sub)
+        .end();
     });
   }
 }

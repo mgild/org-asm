@@ -293,16 +293,18 @@ export function generateBuilder(schema, options = {}) {
     return 'flatbuffers.Offset';
   }
 
-  // ── Generate table objects ───────────────────────────────────────────────
+  // ── Generate table helper classes ────────────────────────────────────────
 
-  const tableBlocks = [];
+  const helperClasses = [];
+  const propDecls = [];
 
   for (const table of tables) {
     const propName = toCamelCase(table.name);
+    const helperName = `${table.name}$`;
     const methods = [];
 
-    // start
-    methods.push(`    start: (): void => { ${table.name}.start${table.name}(this.fb); },`);
+    // start — returns this for chaining
+    methods.push(`  start(): ${helperName} { ${table.name}.start${table.name}(this.fb); return this; }`);
 
     // fields
     for (const field of table.fields) {
@@ -311,12 +313,12 @@ export function generateBuilder(schema, options = {}) {
 
       if (unionNames.has(field.type)) {
         // Union field → generate Type + value methods
-        methods.push(`    ${addMethodName}Type: (${methodName}Type: ${field.type}): void => { ${table.name}.${addMethodName}Type(this.fb, ${methodName}Type); },`);
-        methods.push(`    ${addMethodName}: (${methodName}: flatbuffers.Offset): void => { ${table.name}.${addMethodName}(this.fb, ${methodName}); },`);
+        methods.push(`  ${addMethodName}Type(${methodName}Type: ${field.type}): ${helperName} { ${table.name}.${addMethodName}Type(this.fb, ${methodName}Type); return this; }`);
+        methods.push(`  ${addMethodName}(${methodName}: flatbuffers.Offset): ${helperName} { ${table.name}.${addMethodName}(this.fb, ${methodName}); return this; }`);
       } else {
         const tsType = resolveFieldType(field.type);
         if (tsType) {
-          methods.push(`    ${addMethodName}: (${methodName}: ${tsType}): void => { ${table.name}.${addMethodName}(this.fb, ${methodName}); },`);
+          methods.push(`  ${addMethodName}(${methodName}: ${tsType}): ${helperName} { ${table.name}.${addMethodName}(this.fb, ${methodName}); return this; }`);
         }
       }
     }
@@ -337,23 +339,37 @@ export function generateBuilder(schema, options = {}) {
           arrayType = 'flatbuffers.Offset[]';
         }
 
-        methods.push(`    ${createMethodName}: (data: ${arrayType}): flatbuffers.Offset => ${table.name}.${createMethodName}(this.fb, data),`);
+        methods.push(`  ${createMethodName}(data: ${arrayType}): flatbuffers.Offset { return ${table.name}.${createMethodName}(this.fb, data); }`);
       }
     }
 
-    // end
-    methods.push(`    end: (): flatbuffers.Offset => ${table.name}.end${table.name}(this.fb),`);
+    // end — returns offset (breaks the chain)
+    methods.push(`  end(): flatbuffers.Offset { return ${table.name}.end${table.name}(this.fb); }`);
 
-    tableBlocks.push(`  readonly ${propName} = {\n${methods.join('\n')}\n  };`);
+    helperClasses.push(`class ${helperName} {\n  constructor(private readonly fb: flatbuffers.Builder) {}\n${methods.join('\n')}\n}`);
+    propDecls.push(`  readonly ${propName}: ${helperName};`);
   }
+
+  // ── Constructor ──────────────────────────────────────────────────────────
+
+  const ctorAssigns = tables.map((t) => `    this.${toCamelCase(t.name)} = new ${t.name}$(this.fb);`);
+  const ctorBlock = [
+    '  constructor(initialCapacity?: number) {',
+    '    super(initialCapacity);',
+    ...ctorAssigns,
+    '  }',
+  ];
 
   // ── Assemble ─────────────────────────────────────────────────────────────
 
   const output = [
     imports.join('\n'),
     '',
+    ...helperClasses.map((c) => c + '\n'),
     `export class ${className} extends CommandBuilder {`,
-    tableBlocks.join('\n\n'),
+    ...propDecls,
+    '',
+    ...ctorBlock,
     '}',
     '',
   ];
