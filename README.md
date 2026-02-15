@@ -14,11 +14,11 @@ Real-time web apps — data visualization, simulations, live dashboards, trading
 
 orgASM provides a complete MVC architecture for real-time WASM+React applications:
 
-- **Model** (Rust/WASM): Owns all state and computation. Returns a frame per tick — the frame type is generic (`Float64Array`, FlatBuffers, or any representation). One WASM call per frame instead of N getter calls.
+- **Model** (Rust/WASM): Owns all state and computation. `tick()` serializes state into a FlatBuffer frame — JS reads it zero-copy from WASM linear memory. One WASM call per frame instead of N getter calls.
 - **View** (TypeScript): Applies frame data to DOM, canvas, and charts. Priority-ordered consumers handle data sync, visual effects, and React state updates at different rates.
 - **Controller** (TypeScript): Routes external data (WebSocket) and user input to the Model. Handles connection lifecycle and message parsing.
 
-At 60fps with 39 frame fields, the flat buffer protocol makes **60 boundary crossings/sec instead of 2,340**.
+At 60fps with 39 frame fields, the FlatBuffer protocol makes **60 boundary crossings/sec instead of 2,340**.
 
 ## Architecture
 
@@ -76,46 +76,7 @@ Peer dependencies: `zustand` (>=4), `rxjs` (>=7).
 
 ## Quick Start
 
-### 1. Create Your Rust Engine
-
-Copy the template and customize:
-
-```bash
-cp node_modules/org-asm/model/engine-template.rs crates/my-engine/src/engine.rs
-cp node_modules/org-asm/model/Cargo.template.toml crates/my-engine/Cargo.toml
-```
-
-Define frame buffer offsets and implement `tick()`:
-
-```rust
-const F_INTENSITY: usize = 0;
-const F_IS_ACTIVE: usize = 1;
-const F_COLOR_R: usize = 2;
-const F_COLOR_G: usize = 3;
-const F_COLOR_B: usize = 4;
-const FRAME_SIZE: usize = 5;
-
-#[wasm_bindgen]
-impl Engine {
-    pub fn tick(&mut self, now_ms: f64) {
-        self.frame.fill(0.0);
-        self.smooth_value += (self.current_value - self.smooth_value) * 0.08;
-        self.frame[F_INTENSITY] = self.smooth_value;
-        self.frame[F_IS_ACTIVE] = if self.active { 1.0 } else { 0.0 };
-        let color = compute_color(self.smooth_value);
-        self.frame[F_COLOR_R] = color.0 as f64;
-        self.frame[F_COLOR_G] = color.1 as f64;
-        self.frame[F_COLOR_B] = color.2 as f64;
-    }
-}
-```
-
-Build:
-```bash
-wasm-pack build crates/my-engine --target web --release
-```
-
-### 2. Define Your Frame Schema
+### 1. Define Your Frame Schema
 
 Define a `.fbs` schema — the single source of truth for both Rust and TypeScript:
 
@@ -141,7 +102,53 @@ flatc --rust -o crates/my-engine/src/generated/ schema/frame.fbs
 flatc --ts  -o src/generated/ schema/frame.fbs
 ```
 
-No custom codegen tool needed — `flatc` handles everything.
+### 2. Create Your Rust Engine
+
+Copy the template and customize:
+
+```bash
+cp node_modules/org-asm/model/engine-template.rs crates/my-engine/src/engine.rs
+cp node_modules/org-asm/model/Cargo.template.toml crates/my-engine/Cargo.toml
+```
+
+Implement `tick()` using the generated FlatBuffer types:
+
+```rust
+use flatbuffers::FlatBufferBuilder;
+use crate::generated::frame_generated::*;
+
+#[wasm_bindgen]
+impl Engine {
+    pub fn tick(&mut self, now_ms: f64) {
+        self.builder.reset();
+        self.smooth_value += (self.current_value - self.smooth_value) * 0.08;
+        let color = compute_color(self.smooth_value);
+
+        let frame = Frame::create(&mut self.builder, &FrameArgs {
+            intensity: self.smooth_value,
+            is_active: self.active,
+            color_r: color.0,
+            color_g: color.1,
+            color_b: color.2,
+        });
+        self.builder.finish(frame, None);
+    }
+
+    // JS reads FlatBuffer bytes zero-copy from WASM memory
+    pub fn frame_ptr(&self) -> *const u8 {
+        self.builder.finished_data().as_ptr()
+    }
+
+    pub fn frame_len(&self) -> usize {
+        self.builder.finished_data().len()
+    }
+}
+```
+
+Build:
+```bash
+wasm-pack build crates/my-engine --target web --release
+```
 
 ### 3. Wire the Animation Loop
 
@@ -443,11 +450,10 @@ If a frame budget is exceeded, higher-priority consumers still receive their dat
 
 ## Performance Design
 
-- **1 WASM call per frame** — `tick()` returns everything as a single frame (FlatBuffer or typed array)
-- **Zero allocations in the JS render loop** — frame buffer comes from WASM linear memory
+- **1 WASM call per frame** — `tick()` serializes state into a FlatBuffer, JS reads zero-copy
+- **Zero allocations in the render loop** — FlatBuffer bytes read directly from WASM linear memory
 - **Version-gated data copies** — chart data only copied when `data_version()` changes
 - **Throttled React updates** — 60fps data reaches React at ~10fps via `ThrottledStateSync`
-- **Frozen offset objects** — V8 inlines property lookups from `Object.freeze()`
 - **Batched canvas rendering** — color-quantized Path2D batching reduces GPU state changes 10-30x
 - **Precomputed CSS values** — engine computes CSS-ready numbers, JS applies them directly
 
