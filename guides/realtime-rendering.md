@@ -3,15 +3,21 @@
 ## When to Use
 When building UIs that update at 60fps (charts, animations, games, simulations). This is the real-time rendering pattern within orgASM — one of several ways the Rust Model exposes state to the TypeScript View. The core challenge: 60fps data must NEVER trigger React re-renders.
 
-## Architecture: Three-Speed Data Flow
+## Architecture: Multi-Speed Data Flow
+
+This guide covers the **60fps path**. The framework also provides hooks for slower paths — see the hook table below.
 
 ```
-60fps: Engine.tick() --> Canvas/DOM        (module-level, no React)
-10fps: Throttled store --> React re-render (RxJS/ThrottledStateSync --> Zustand)
- 1fps: Config changes --> Engine.set_xxx() (user interaction)
+60fps:      Engine.tick() → Canvas/DOM             (module-level, zero React)
+~10fps:     useFrame() / ThrottledStateSync        (React re-renders)
+on-demand:  useWasmCall() / useWasmState()         (validation, events, derived values)
+async:      useAsyncWasmCall()                     (worker offload, wasm-bindgen-futures)
+streaming:  useWasmStream()                        (large dataset processing, progress)
+reducer:    useWasmReducer()                       (forms, CRUD, state machines)
+~1fps:      Config changes → Engine.set_*()        (user settings)
 ```
 
-Never mix these speeds. If 60fps data flows into React state, you get 60 re-renders per second. The browser cannot reconcile the virtual DOM that fast, leading to dropped frames, high CPU, and laggy UI.
+Never mix the fast and slow paths. If 60fps data flows into React state, you get 60 re-renders per second. The browser cannot reconcile the virtual DOM that fast, leading to dropped frames, high CPU, and laggy UI. The patterns below focus on the 60fps tier.
 
 ## Pattern 1: Module-Level Engine
 Instantiate the engine OUTSIDE any React component. This makes it accessible from animation loops, WebSocket handlers, and canvas plugins without React overhead:

@@ -246,6 +246,17 @@ chartEl.onmousedown = () => input.startAction('session', { actionType });
 const cleanup = input.bindGlobalRelease();
 ```
 
+## Non-Tick Data Paths
+
+This guide covers the tick-based pipeline (WebSocket → engine → tick → DOM/React). For data that doesn't need 60fps rendering, the framework provides dedicated hooks:
+
+- **`useWasmState(notifier, getSnapshot)`** — When WebSocket messages mutate engine state and React should re-read it. Call `notifier.notify()` after `engine.ingest_message()` and all subscribers re-read their snapshots.
+- **`useWasmCall(fn, deps)`** — For on-demand reads (validation, formatting) triggered by React deps, not by incoming data.
+- **`useAsyncWasmCall(fn, deps)`** — For async operations (worker offload, wasm-bindgen-futures).
+- **`useWasmReducer(engine, config)`** — For apps without a tick loop (forms, dashboards, CRUD).
+
+See `guides/wasm-engine-pattern.md` for the full hook table and `guides/form-validation.md` for form patterns.
+
 ## Key Principles
 1. **Parse JSON in JS** (native C++ parser), not WASM -- saves ~30KB binary size
 2. **Pass primitives (f64) to engine**, not objects or strings

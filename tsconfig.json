@@ -21,7 +21,8 @@
     "model/**/*.ts",
     "view/**/*.ts",
     "controller/**/*.ts",
-    "react/**/*.ts"
+    "react/**/*.ts",
+    "react/**/*.tsx"
   ],
   "exclude": [
     "dist",

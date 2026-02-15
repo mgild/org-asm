@@ -74,7 +74,10 @@
     "mvc",
     "server",
     "orderbook",
-    "websocket"
+    "websocket",
+    "validation",
+    "forms",
+    "state-management"
   ],
   "license": "MIT",
   "dependencies": {
