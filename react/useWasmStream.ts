@@ -42,8 +42,9 @@ export function useWasmStream<T>(
 
   const flush = useCallback(() => {
     rafRef.current = 0;
-    setChunks(prev => [...prev, ...accRef.current]);
+    const pending = accRef.current;
     accRef.current = [];
+    setChunks(prev => [...prev, ...pending]);
   }, []);
 
   useEffect(() => {
@@ -81,17 +82,14 @@ export function useWasmStream<T>(
           },
         );
       } else {
-        // Synchronous stream completed
-        if (!stale) {
-          if (accRef.current.length > 0) flush();
-          setDone(true);
-        }
-      }
-    } catch (err) {
-      if (!stale) {
-        setError(err instanceof Error ? err : new Error(String(err)));
+        // Synchronous stream completed (stale is always false here)
+        if (accRef.current.length > 0) flush();
         setDone(true);
       }
+    } catch (err) {
+      // Synchronous throw (stale is always false here)
+      setError(err instanceof Error ? err : new Error(String(err)));
+      setDone(true);
     }
 
     return () => {

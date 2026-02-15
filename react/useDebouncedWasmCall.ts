@@ -37,9 +37,7 @@ export function useDebouncedWasmCall<T>(
     }, delayMs);
 
     return () => {
-      if (timerRef.current !== undefined) {
-        clearTimeout(timerRef.current);
-      }
+      clearTimeout(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, delayMs]);
