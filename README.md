@@ -140,6 +140,22 @@ Real-time paths use the frame buffer and direct DOM writes — React never sees 
 | API-level state | `useApiState` | `ApiState` |
 | Per-request reactivity | `useRequest` | `RequestState` |
 | Share API across tree | `createApiContext` | `{ ApiProvider, useApi, useApiStatus, useRequest }` |
+| Rust-owned virtual scroll state | `useVirtualScrollEngine` | `VirtualScrollHandle \| null` |
+| Scroll-level state | `useVirtualScrollState` | `VirtualScrollState` |
+| Per-item scroll reactivity | `useVirtualScrollItem` | `VirtualScrollItem` |
+| Share scroll across tree | `createVirtualScrollContext` | `{ VirtualScrollProvider, useVirtualScroll, useVirtualScrollStatus, useVirtualScrollItem }` |
+| Rust-owned validation state | `useValidationEngine` | `ValidationHandle \| null` |
+| Validation-level state | `useValidationState` | `ValidationState` |
+| Per-field validation | `useFieldValidation` | `FieldValidation` |
+| Share validation across tree | `createValidationContext` | `{ ValidationProvider, useValidation, useValidationStatus, useFieldValidation }` |
+| Rust-owned selection state | `useSelectionEngine` | `SelectionHandle \| null` |
+| Selection-level state | `useSelectionState` | `SelectionState` |
+| Per-item selection | `useSelectionItem` | `SelectionItem` |
+| Share selection across tree | `createSelectionContext` | `{ SelectionProvider, useSelection, useSelectionStatus, useSelectionItem }` |
+| Rust-owned command palette | `useCommandPaletteEngine` | `CommandPaletteHandle \| null` |
+| Palette-level state | `useCommandPaletteState` | `CommandPaletteState` |
+| Per-result palette reactivity | `useCommandPaletteResult` | `CommandPaletteResult` |
+| Share palette across tree | `createCommandPaletteContext` | `{ CommandPaletteProvider, useCommandPalette, useCommandPaletteStatus, useCommandPaletteResult }` |
 | Catch WASM panics | `WasmErrorBoundary` | React component |
 | Manage WebSocket/SSE | `useConnection` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM | `useWorker` | `{ loop, bridge, ready, error }` |
@@ -620,6 +636,42 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useRequest(handle, requestId)` | `RequestState` | Per-request subscription -- only re-renders when this request's status changes |
 | `createApiContext<E>()` | `{ ApiProvider, useApi, useApiStatus, useRequest }` | Context factory for sharing API across component tree without prop drilling |
 
+#### VirtualScroll Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useVirtualScrollEngine(engine)` | `VirtualScrollHandle \| null` | Create dispatch handle wrapping a Rust IVirtualScrollEngine -- setViewportHeight, setItemCount, setScrollOffset, scrollToIndex, reset |
+| `useVirtualScrollState(handle)` | `VirtualScrollState` | Scroll-level subscription -- itemCount, viewportHeight, scrollOffset, visibleStart, visibleEnd, totalHeight, dataVersion |
+| `useVirtualScrollItem(handle, index)` | `VirtualScrollItem` | Per-item subscription -- only re-renders when this item's position/visibility changes |
+| `createVirtualScrollContext<E>()` | `{ VirtualScrollProvider, useVirtualScroll, useVirtualScrollStatus, useVirtualScrollItem }` | Context factory for sharing virtual scroll across component tree without prop drilling |
+
+#### Validation Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useValidationEngine(engine)` | `ValidationHandle \| null` | Create dispatch handle wrapping a Rust IValidationEngine -- addRule, addSchema, validateJson, clearErrors, reset |
+| `useValidationState(handle)` | `ValidationState` | Validation-level subscription -- ruleCount, schemaCount, pendingValidationCount, dataVersion |
+| `useFieldValidation(handle, schemaId, field)` | `FieldValidation` | Per-field subscription -- only re-renders when this field's validation state changes |
+| `createValidationContext<E>()` | `{ ValidationProvider, useValidation, useValidationStatus, useFieldValidation }` | Context factory for sharing validation across component tree without prop drilling |
+
+#### Selection Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useSelectionEngine(engine)` | `SelectionHandle \| null` | Create dispatch handle wrapping a Rust ISelectionEngine -- select, toggle, selectRange, moveFocus, activateFocus, reset |
+| `useSelectionState(handle)` | `SelectionState` | Selection-level subscription -- mode, itemCount, selectedCount, focusId, anchorId, dataVersion |
+| `useSelectionItem(handle, id)` | `SelectionItem` | Per-item subscription -- only re-renders when this item's selection/focus state changes |
+| `createSelectionContext<E>()` | `{ SelectionProvider, useSelection, useSelectionStatus, useSelectionItem }` | Context factory for sharing selection across component tree without prop drilling |
+
+#### CommandPalette Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useCommandPaletteEngine(engine)` | `CommandPaletteHandle \| null` | Create dispatch handle wrapping a Rust ICommandPaletteEngine -- registerCommand, setQuery, markExecuted, resolveKeybinding, reset |
+| `useCommandPaletteState(handle)` | `CommandPaletteState` | Palette-level subscription -- commandCount, query, resultCount, page, pageSize, lastExecutedId, dataVersion |
+| `useCommandPaletteResult(handle, index)` | `CommandPaletteResult` | Per-result subscription -- only re-renders when this result's state changes |
+| `createCommandPaletteContext<E>()` | `{ CommandPaletteProvider, useCommandPalette, useCommandPaletteStatus, useCommandPaletteResult }` | Context factory for sharing command palette across component tree without prop drilling |
+
 #### Connection & Infrastructure
 
 | Hook | Returns | Description |
@@ -662,6 +714,10 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 | `ISearchEngine` | Search engine contract: `load_items()`, `set_query()`, `add_filter()`, `set_sort()`, `set_page()`, `get_result_value()`, `get_facet_count()` |
 | `IStateMachineEngine` | State machine engine contract: `add_state()`, `add_transition()`, `send_event()`, `resolve_guard()`, `set_context()`, `is_in_state()` |
 | `IApiEngine` | API engine contract: `register_endpoint()`, `begin_request()`, `set_request_success()`, `build_url()`, `is_cached()`, `invalidate_cache()` |
+| `IVirtualScrollEngine` | Virtual scroll contract: `set_viewport_height()`, `set_item_count()`, `set_scroll_offset()`, `scroll_to_index()`, `visible_start()`, `visible_end()` |
+| `IValidationEngine` | Validation contract: `add_rule()`, `add_schema()`, `validate_json()`, `field_error()`, `start_validation()`, `resolve_async_validation()` |
+| `ISelectionEngine` | Selection contract: `select()`, `deselect()`, `toggle()`, `select_range()`, `move_focus()`, `activate_focus()`, `set_mode()` |
+| `ICommandPaletteEngine` | Command palette contract: `register_command()`, `set_query()`, `resolve_keybinding()`, `mark_executed()`, `result_id()`, `result_score()` |
 | `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()`, `batch()` |
 
 ### View

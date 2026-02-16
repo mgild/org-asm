@@ -399,3 +399,137 @@ export interface RequestState {
   readonly hasResponse: boolean;
 }
 
+// ============================================
+// VirtualScroll engine types
+// ============================================
+
+/** Scroll alignment for scroll-to-index. */
+export enum ScrollAlign { Start = 0, Center = 1, End = 2 }
+
+/** Top-level virtual scroll state snapshot. Read by useVirtualScrollState. */
+export interface VirtualScrollState {
+  readonly itemCount: number;
+  readonly viewportHeight: number;
+  readonly overscanCount: number;
+  readonly scrollOffset: number;
+  readonly totalHeight: number;
+  readonly visibleStart: number;
+  readonly visibleEnd: number;
+  readonly visibleCount: number;
+  readonly defaultItemHeight: number;
+  readonly anchor: number;
+  readonly dataVersion: number;
+}
+
+/** Per-item state snapshot. Read by useVirtualScrollItem. */
+export interface VirtualScrollItem {
+  readonly index: number;
+  readonly top: number;
+  readonly height: number;
+  readonly isVisible: boolean;
+}
+
+// ============================================
+// Validation engine types
+// ============================================
+
+/** Validation rule type. */
+export enum ValidationRuleType {
+  Required = 0,
+  Min = 1,
+  Max = 2,
+  MinLength = 3,
+  MaxLength = 4,
+  Pattern = 5,
+  Email = 6,
+  Custom = 7,
+}
+
+/** Cross-field rule type. */
+export enum CrossFieldRuleType {
+  Equal = 0,
+  NotEqual = 1,
+  GreaterThan = 2,
+  LessThan = 3,
+  Custom = 4,
+}
+
+/** Top-level validation state snapshot. Read by useValidationState. */
+export interface ValidationState {
+  readonly ruleCount: number;
+  readonly schemaCount: number;
+  readonly pendingValidationCount: number;
+  readonly dataVersion: number;
+}
+
+/** Per-schema validation state snapshot. */
+export interface SchemaValidation {
+  readonly schemaId: string;
+  readonly errorCount: number;
+  readonly isValid: boolean;
+}
+
+/** Per-field validation state snapshot. Read by useFieldValidation. */
+export interface FieldValidation {
+  readonly schemaId: string;
+  readonly field: string;
+  readonly errorCount: number;
+  readonly hasError: boolean;
+  readonly firstError: string;
+}
+
+// ============================================
+// Selection engine types
+// ============================================
+
+/** Selection mode. */
+export enum SelectionMode { Single = 0, Multi = 1, Range = 2 }
+
+/** Focus direction for keyboard navigation. */
+export enum FocusDirection { Up = 0, Down = 1, Left = 2, Right = 3 }
+
+/** Top-level selection state snapshot. Read by useSelectionState. */
+export interface SelectionState {
+  readonly mode: number;
+  readonly itemCount: number;
+  readonly selectedCount: number;
+  readonly focusId: string;
+  readonly anchorId: string;
+  readonly dataVersion: number;
+}
+
+/** Per-item selection state snapshot. Read by useSelectionItem. */
+export interface SelectionItem {
+  readonly id: string;
+  readonly isSelected: boolean;
+  readonly isFocused: boolean;
+  readonly index: number;
+}
+
+// ============================================
+// CommandPalette engine types
+// ============================================
+
+/** Top-level command palette state snapshot. Read by useCommandPaletteState. */
+export interface CommandPaletteState {
+  readonly commandCount: number;
+  readonly query: string;
+  readonly resultCount: number;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly pageCount: number;
+  readonly lastExecutedId: string;
+  readonly dataVersion: number;
+}
+
+/** Per-result state snapshot. Read by useCommandPaletteResult. */
+export interface CommandPaletteResult {
+  readonly index: number;
+  readonly id: string;
+  readonly label: string;
+  readonly category: string;
+  readonly score: number;
+  readonly isEnabled: boolean;
+  readonly keybinding: string;
+}
+

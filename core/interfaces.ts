@@ -1073,3 +1073,355 @@ export interface IApiEngine {
   /** Reset all API state to defaults. */
   reset(): void;
 }
+
+// ============================================
+// VirtualScroll engine interfaces
+// ============================================
+
+/**
+ * IVirtualScrollEngine — Rust-owned virtual scroll state contract.
+ *
+ * ALL scroll state lives in the WASM engine: viewport dimensions, item heights,
+ * scroll offset, visible range computation, scroll-to logic, anchoring.
+ * TypeScript is a dumb list renderer that dispatches scroll events and reads
+ * visible range / item positions back.
+ *
+ * Lazy recomputation: mutations set dirty flags, reads trigger recompute()
+ * if dirty. Binary search through cumulative heights for visible range.
+ *
+ * Implementors: Rust structs compiled to WASM with HashMap-based item heights,
+ * dirty-flag recomputation, and binary search for visible range.
+ */
+export interface IVirtualScrollEngine {
+  // --- Viewport ---
+  /** Set the viewport height in pixels. */
+  set_viewport_height(height: number): void;
+  /** Set the overscan count (extra items rendered above/below visible area). */
+  set_overscan_count(count: number): void;
+  /** Get the viewport height. */
+  viewport_height(): number;
+  /** Get the overscan count. */
+  overscan_count(): number;
+
+  // --- Items ---
+  /** Set the total number of items. */
+  set_item_count(count: number): void;
+  /** Set the height of a specific item. */
+  set_item_height(index: number, height: number): void;
+  /** Set the default height for items without explicit heights. */
+  set_default_item_height(height: number): void;
+  /** Get the height of a specific item. */
+  item_height(index: number): number;
+  /** Get the default item height. */
+  default_item_height(): number;
+  /** Get the total number of items. */
+  item_count(): number;
+
+  // --- Scroll ---
+  /** Set the current scroll offset in pixels. */
+  set_scroll_offset(offset: number): void;
+  /** Get the current scroll offset. */
+  scroll_offset(): number;
+  /** Get the total scrollable height. */
+  total_height(): number;
+
+  // --- Visible range (computed) ---
+  /** Get the index of the first visible item. */
+  visible_start(): number;
+  /** Get the index past the last visible item. */
+  visible_end(): number;
+  /** Get the number of visible items. */
+  visible_count(): number;
+
+  // --- Positioning ---
+  /** Get the top offset of an item in pixels. */
+  item_top(index: number): number;
+  /** Get the bottom offset of an item in pixels. */
+  item_bottom(index: number): number;
+
+  // --- Scroll-to ---
+  /** Scroll to bring an item into view. */
+  scroll_to_index(index: number): void;
+  /** Scroll to bring an item into view with alignment (0=start,1=center,2=end). */
+  scroll_to_index_aligned(index: number, align: number): void;
+  /** Whether an item is currently visible. */
+  is_index_visible(index: number): boolean;
+
+  // --- Anchoring ---
+  /** Set an anchor item to maintain position during content changes. */
+  set_anchor(index: number): void;
+  /** Get the current anchor item index (-1 if none). */
+  anchor(): number;
+  /** Clear the anchor. */
+  clear_anchor(): void;
+  /** Get the offset delta caused by content changes relative to anchor. */
+  anchor_offset_delta(): number;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all virtual scroll state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// Validation engine interfaces
+// ============================================
+
+/**
+ * IValidationEngine — Rust-owned schema-based validation state contract.
+ *
+ * ALL validation state lives in the WASM engine: rules, schemas, field errors,
+ * cross-field rules, async validation tracking. TypeScript is a dumb form
+ * renderer that dispatches validation actions and reads errors back.
+ *
+ * Rule types: 0=required, 1=min, 2=max, 3=minLength, 4=maxLength,
+ * 5=pattern, 6=email, 7=custom.
+ *
+ * Implementors: Rust structs compiled to WASM with HashMap-based rules,
+ * schemas, and error storage. No serde — uses lightweight JSON parsing.
+ */
+export interface IValidationEngine {
+  // --- Rules ---
+  /** Add a validation rule. type: 0=required,1=min,2=max,3=minLength,4=maxLength,5=pattern,6=email,7=custom. */
+  add_rule(rule_id: string, rule_type: number, params_json: string): void;
+  /** Remove a validation rule by ID. */
+  remove_rule(rule_id: string): void;
+  /** Number of registered rules. */
+  rule_count(): number;
+  /** Get a rule ID by index. */
+  rule_id(index: number): string;
+
+  // --- Schemas ---
+  /** Add a validation schema. */
+  add_schema(schema_id: string): void;
+  /** Add a field to a schema with validation rules JSON. */
+  add_schema_field(schema_id: string, field: string, rules_json: string): void;
+  /** Remove a schema. */
+  remove_schema(schema_id: string): void;
+  /** Number of registered schemas. */
+  schema_count(): number;
+  /** Get a schema ID by index. */
+  schema_id(index: number): string;
+
+  // --- Validation ---
+  /** Validate data against a schema. Returns true if valid. */
+  validate_json(schema_id: string, data_json: string): boolean;
+  /** Clear all errors for a schema. */
+  clear_errors(schema_id: string): void;
+
+  // --- Errors ---
+  /** Total error count for a schema. */
+  error_count(schema_id: string): number;
+  /** Error count for a specific field in a schema. */
+  field_error_count(schema_id: string, field: string): number;
+  /** Get a specific error for a field by index. */
+  field_error(schema_id: string, field: string, index: number): string;
+  /** Whether a field has any errors. */
+  field_has_error(schema_id: string, field: string): boolean;
+  /** Get all errors for a field as JSON array. */
+  field_errors_json(schema_id: string, field: string): string;
+
+  // --- Cross-field ---
+  /** Add a cross-field rule. type: 0=equal,1=notEqual,2=greaterThan,3=lessThan,4=custom. */
+  add_cross_field_rule(schema_id: string, rule_type: number, fields_json: string, params_json: string): void;
+  /** Number of cross-field rules for a schema. */
+  cross_field_rule_count(schema_id: string): number;
+
+  // --- Async ---
+  /** Start an async validation. Returns a validation ID. */
+  start_validation(schema_id: string, field: string, rule_id: string): number;
+  /** Resolve an async validation with result. */
+  resolve_async_validation(validation_id: number, is_valid: boolean, error: string): void;
+  /** Number of pending async validations. */
+  pending_validation_count(): number;
+  /** Get the schema ID for a pending validation. */
+  pending_validation_schema(validation_id: number): string;
+  /** Get the field for a pending validation. */
+  pending_validation_field(validation_id: number): string;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all validation state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// Selection engine interfaces
+// ============================================
+
+/**
+ * ISelectionEngine — Rust-owned selection state contract.
+ *
+ * ALL selection state lives in the WASM engine: selected items, focus,
+ * anchor, selection mode, keyboard navigation. TypeScript is a dumb
+ * list renderer that dispatches selection actions and reads state back.
+ *
+ * Modes: 0=single (one item at a time), 1=multi (toggle individual),
+ * 2=range (shift-click selects range from anchor).
+ *
+ * Implementors: Rust structs compiled to WASM with HashSet-based selection,
+ * Vec-based item storage, and index-based keyboard navigation.
+ */
+export interface ISelectionEngine {
+  // --- Mode ---
+  /** Set the selection mode (0=single,1=multi,2=range). */
+  set_mode(mode: number): void;
+  /** Get the current selection mode. */
+  mode(): number;
+
+  // --- Items ---
+  /** Set items from a JSON array of ID strings. */
+  set_items(json: string): void;
+  /** Add an item at a specific index. */
+  add_item(id: string, index: number): void;
+  /** Remove an item by ID. */
+  remove_item(id: string): void;
+  /** Clear all items. */
+  clear_items(): void;
+  /** Total number of items. */
+  item_count(): number;
+  /** Get the item ID at an index. */
+  item_id(index: number): string;
+  /** Get the index of an item by ID (-1 if not found). */
+  item_index(id: string): number;
+
+  // --- Selection ---
+  /** Select an item by ID. */
+  select(id: string): void;
+  /** Deselect an item by ID. */
+  deselect(id: string): void;
+  /** Toggle an item's selection. */
+  toggle(id: string): void;
+  /** Select a range of items between two IDs. */
+  select_range(from_id: string, to_id: string): void;
+  /** Select all items. */
+  select_all(): void;
+  /** Deselect all items. */
+  deselect_all(): void;
+  /** Whether an item is selected. */
+  is_selected(id: string): boolean;
+  /** Number of selected items. */
+  selected_count(): number;
+  /** Get a selected item ID by index. */
+  selected_id(index: number): string;
+
+  // --- Focus ---
+  /** Set the focused item. */
+  set_focus(id: string): void;
+  /** Get the focused item ID. */
+  focus(): string;
+  /** Whether an item is focused. */
+  is_focused(id: string): boolean;
+
+  // --- Anchor ---
+  /** Set the anchor item for range selection. */
+  set_anchor(id: string): void;
+  /** Get the anchor item ID. */
+  anchor(): string;
+  /** Clear the anchor. */
+  clear_anchor(): void;
+
+  // --- Keyboard ---
+  /** Move focus in a direction (0=up,1=down,2=left,3=right). */
+  move_focus(direction: number): void;
+  /** Activate (select) the focused item. */
+  activate_focus(): void;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all selection state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// CommandPalette engine interfaces
+// ============================================
+
+/**
+ * ICommandPaletteEngine — Rust-owned command palette state contract.
+ *
+ * ALL command palette state lives in the WASM engine: command registry,
+ * fuzzy search, keybinding resolution, execution tracking, pagination.
+ * TypeScript is a dumb palette renderer that dispatches commands and
+ * reads search results back.
+ *
+ * Fuzzy match: subsequence matching with gap penalty + recency boost
+ * from execution count. Results sorted by score descending.
+ *
+ * Implementors: Rust structs compiled to WASM with Vec-based command
+ * storage, HashMap keybinding index, and dirty-flag lazy recomputation.
+ */
+export interface ICommandPaletteEngine {
+  // --- Registration ---
+  /** Register a command with ID, label, category, and keybinding. */
+  register_command(id: string, label: string, category: string, keybinding: string): void;
+  /** Unregister a command by ID. */
+  unregister_command(id: string): void;
+  /** Number of registered commands. */
+  command_count(): number;
+  /** Get a command ID by index. */
+  command_id(index: number): string;
+  /** Get a command label by ID. */
+  command_label(id: string): string;
+  /** Get a command category by ID. */
+  command_category(id: string): string;
+
+  // --- Enabled ---
+  /** Set whether a command is enabled. */
+  set_enabled(id: string, enabled: boolean): void;
+  /** Whether a command is enabled. */
+  is_enabled(id: string): boolean;
+
+  // --- Search ---
+  /** Set the search query text. */
+  set_query(text: string): void;
+  /** Get the current search query. */
+  query(): string;
+  /** Number of search results. */
+  result_count(): number;
+  /** Get the command ID of a result at index. */
+  result_id(index: number): string;
+  /** Get the label of a result at index. */
+  result_label(index: number): string;
+  /** Get the category of a result at index. */
+  result_category(index: number): string;
+  /** Get the score of a result at index. */
+  result_score(index: number): number;
+
+  // --- Keybindings ---
+  /** Resolve a key combo to a command ID. */
+  resolve_keybinding(key_combo: string): string;
+  /** Get the keybinding for a command. */
+  keybinding(command_id: string): string;
+  /** Set the keybinding for a command. */
+  set_keybinding(command_id: string, keybinding: string): void;
+
+  // --- Execution ---
+  /** Mark a command as executed (increments execution count). */
+  mark_executed(id: string): void;
+  /** Get the last executed command ID. */
+  last_executed_id(): string;
+  /** Get the execution count for a command. */
+  execution_count(id: string): number;
+
+  // --- Pagination ---
+  /** Set the current page (0-based). */
+  set_page(page: number): void;
+  /** Set the page size. */
+  set_page_size(size: number): void;
+  /** Current page index. */
+  page(): number;
+  /** Current page size. */
+  page_size(): number;
+  /** Total number of pages. */
+  page_count(): number;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all command palette state to defaults. */
+  reset(): void;
+}

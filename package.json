@@ -60,6 +60,10 @@
     "model/search-engine-template.rs",
     "model/statemachine-engine-template.rs",
     "model/api-engine-template.rs",
+    "model/virtualscroll-engine-template.rs",
+    "model/validation-engine-template.rs",
+    "model/selection-engine-template.rs",
+    "model/commandpalette-engine-template.rs",
     "model/Cargo.template.toml",
     "shared/lib-template.rs",
     "shared/validation-template.rs",
@@ -106,7 +110,11 @@
     "i18n",
     "search",
     "state-machine",
-    "api"
+    "api",
+    "virtual-scroll",
+    "validation",
+    "selection",
+    "command-palette"
   ],
   "license": "MIT",
   "dependencies": {

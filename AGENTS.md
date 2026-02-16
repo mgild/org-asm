@@ -74,6 +74,22 @@ import { /* store factories */ } from 'org-asm/model';
 | API-level state (endpoints, requests) | `useApiState` | `(handle)` | `ApiState` |
 | Per-request subscription | `useRequest` | `(handle, requestId)` | `RequestState` |
 | Share API across component tree | `createApiContext` | `<E>()` | `{ ApiProvider, useApi, useApiStatus, useRequest }` |
+| Rust-owned virtual scroll state | `useVirtualScrollEngine` | `(engine)` | `VirtualScrollHandle \| null` |
+| Scroll-level state (visible range) | `useVirtualScrollState` | `(handle)` | `VirtualScrollState` |
+| Per-item scroll subscription | `useVirtualScrollItem` | `(handle, index)` | `VirtualScrollItem` |
+| Share virtual scroll across tree | `createVirtualScrollContext` | `<E>()` | `{ VirtualScrollProvider, useVirtualScroll, useVirtualScrollStatus, useVirtualScrollItem }` |
+| Rust-owned validation state | `useValidationEngine` | `(engine)` | `ValidationHandle \| null` |
+| Validation-level state | `useValidationState` | `(handle)` | `ValidationState` |
+| Per-field validation subscription | `useFieldValidation` | `(handle, schemaId, field)` | `FieldValidation` |
+| Share validation across tree | `createValidationContext` | `<E>()` | `{ ValidationProvider, useValidation, useValidationStatus, useFieldValidation }` |
+| Rust-owned selection state | `useSelectionEngine` | `(engine)` | `SelectionHandle \| null` |
+| Selection-level state | `useSelectionState` | `(handle)` | `SelectionState` |
+| Per-item selection subscription | `useSelectionItem` | `(handle, id)` | `SelectionItem` |
+| Share selection across tree | `createSelectionContext` | `<E>()` | `{ SelectionProvider, useSelection, useSelectionStatus, useSelectionItem }` |
+| Rust-owned command palette state | `useCommandPaletteEngine` | `(engine)` | `CommandPaletteHandle \| null` |
+| Palette-level state (query, results) | `useCommandPaletteState` | `(handle)` | `CommandPaletteState` |
+| Per-result palette subscription | `useCommandPaletteResult` | `(handle, index)` | `CommandPaletteResult` |
+| Share palette across tree | `createCommandPaletteContext` | `<E>()` | `{ CommandPaletteProvider, useCommandPalette, useCommandPaletteStatus, useCommandPaletteResult }` |
 | Catch WASM panics | `WasmErrorBoundary` | component | Renders fallback on error |
 | WebSocket/SSE connection | `useConnection` | `(config)` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM (frame-oriented) | `useWorker` | `(config)` | `{ loop, bridge, ready, error }` |
@@ -452,6 +468,22 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `useApiState` | API-level subscription (endpointCount, activeRequestCount) |
 | `useRequest` | Per-request subscription (requestId, status, error, hasResponse) |
 | `createApiContext` | Shared API context factory (Provider + hooks) |
+| `useVirtualScrollEngine` | Create VirtualScrollHandle wrapping Rust IVirtualScrollEngine |
+| `useVirtualScrollState` | Scroll-level subscription (visibleStart, visibleEnd, totalHeight, scrollOffset) |
+| `useVirtualScrollItem` | Per-item subscription (top, height, isVisible) |
+| `createVirtualScrollContext` | Shared virtual scroll context factory (Provider + hooks) |
+| `useValidationEngine` | Create ValidationHandle wrapping Rust IValidationEngine |
+| `useValidationState` | Validation-level subscription (ruleCount, schemaCount, pendingValidationCount) |
+| `useFieldValidation` | Per-field validation subscription (errorCount, hasError, firstError) |
+| `createValidationContext` | Shared validation context factory (Provider + hooks) |
+| `useSelectionEngine` | Create SelectionHandle wrapping Rust ISelectionEngine |
+| `useSelectionState` | Selection-level subscription (mode, selectedCount, focusId, anchorId) |
+| `useSelectionItem` | Per-item selection subscription (isSelected, isFocused, index) |
+| `createSelectionContext` | Shared selection context factory (Provider + hooks) |
+| `useCommandPaletteEngine` | Create CommandPaletteHandle wrapping Rust ICommandPaletteEngine |
+| `useCommandPaletteState` | Palette-level subscription (commandCount, query, resultCount, page) |
+| `useCommandPaletteResult` | Per-result subscription (id, label, category, score, keybinding) |
+| `createCommandPaletteContext` | Shared command palette context factory (Provider + hooks) |
 | `WasmErrorBoundary` | Error boundary for WASM panics with reset |
 | `useConnection` | WebSocket/SSE with state tracking |
 | `useWorker` | Off-main-thread WASM via SharedArrayBuffer |
@@ -522,6 +554,24 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `ParamSource` | Parameter source type ('path' \| 'query' \| 'body' \| 'header') |
 | `ApiState` | API-level snapshot (endpointCount, activeRequestCount) |
 | `RequestState` | Per-request snapshot (requestId, status, error, hasResponse) |
+| `IVirtualScrollEngine` | Virtual scroll contract: `set_viewport_height()`, `set_item_count()`, `set_scroll_offset()`, `scroll_to_index()`, `visible_start()`, `visible_end()` |
+| `ScrollAlign` | Scroll alignment enum (Start, Center, End) |
+| `VirtualScrollState` | Scroll-level snapshot (itemCount, viewportHeight, scrollOffset, visibleStart, visibleEnd, totalHeight) |
+| `VirtualScrollItem` | Per-item snapshot (index, top, height, isVisible) |
+| `IValidationEngine` | Validation contract: `add_rule()`, `add_schema()`, `validate_json()`, `field_error()`, `start_validation()` |
+| `ValidationRuleType` | Rule type enum (Required, Min, Max, MinLength, MaxLength, Pattern, Email, Custom) |
+| `CrossFieldRuleType` | Cross-field rule type enum (Equal, NotEqual, GreaterThan, LessThan, Custom) |
+| `ValidationState` | Validation-level snapshot (ruleCount, schemaCount, pendingValidationCount) |
+| `SchemaValidation` | Per-schema snapshot (schemaId, errorCount, isValid) |
+| `FieldValidation` | Per-field snapshot (schemaId, field, errorCount, hasError, firstError) |
+| `ISelectionEngine` | Selection contract: `select()`, `deselect()`, `toggle()`, `select_range()`, `move_focus()` |
+| `SelectionMode` | Selection mode enum (Single, Multi, Range) |
+| `FocusDirection` | Focus direction enum (Up, Down, Left, Right) |
+| `SelectionState` | Selection-level snapshot (mode, itemCount, selectedCount, focusId, anchorId) |
+| `SelectionItem` | Per-item snapshot (id, isSelected, isFocused, index) |
+| `ICommandPaletteEngine` | Command palette contract: `register_command()`, `set_query()`, `resolve_keybinding()`, `mark_executed()` |
+| `CommandPaletteState` | Palette-level snapshot (commandCount, query, resultCount, page, lastExecutedId) |
+| `CommandPaletteResult` | Per-result snapshot (id, label, category, score, isEnabled, keybinding) |
 | `WasmNotifier` | Pub/sub interface for useWasmState |
 | `IEngine<F>` | Model contract (tick, addDataPoint, openAction) |
 | `IAnimationLoop<F>` | Loop contract (start, stop, addConsumer) |
@@ -543,6 +593,10 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 5h. `guides/search-engine.md` — Search engine: ISearchEngine, filters, facets, pagination, lazy recomputation
 5i. `guides/statemachine-engine.md` — State machine engine: IStateMachineEngine, transitions, guards, parallel states
 5j. `guides/api-engine.md` — API engine: IApiEngine, endpoint normalization, request tracking, caching
+5k. `guides/virtualscroll-engine.md` — VirtualScroll engine: IVirtualScrollEngine, visible range, scroll-to, anchoring
+5l. `guides/validation-engine.md` — Validation engine: IValidationEngine, rules, schemas, cross-field, async
+5m. `guides/selection-engine.md` — Selection engine: ISelectionEngine, multi-select, range-select, keyboard nav
+5n. `guides/commandpalette-engine.md` — CommandPalette engine: ICommandPaletteEngine, fuzzy search, keybindings
 6. `guides/frame-buffer-design.md` — FlatBuffer frame protocol, zero-copy reads
 7. `guides/server-engine-pattern.md` — Server-side Rust engine, FlatBuffer broadcast
 
