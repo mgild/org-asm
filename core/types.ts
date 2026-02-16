@@ -181,3 +181,95 @@ export interface TableState {
   readonly dataVersion: number;
 }
 
+// ============================================
+// Auth engine types
+// ============================================
+
+/** Auth status enum. Mirrors the u8 values from the Rust engine. */
+export enum AuthStatus {
+  Unauthenticated = 0,
+  Authenticating = 1,
+  Authenticated = 2,
+  Refreshing = 3,
+  Error = 4,
+}
+
+/** Top-level auth state snapshot. Read by useAuthState. */
+export interface AuthState {
+  readonly status: AuthStatus;
+  readonly isAuthenticated: boolean;
+  readonly errorMessage: string;
+  readonly accessExpiryMs: number;
+  readonly refreshExpiryMs: number;
+  readonly userId: string;
+  readonly userDisplayName: string;
+  readonly permissionCount: number;
+  readonly roleCount: number;
+  readonly dataVersion: number;
+}
+
+/** Per-permission state snapshot. Read by usePermission. */
+export interface PermissionState {
+  readonly name: string;
+  readonly granted: boolean;
+}
+
+/** Per-role state snapshot. Read by useRole. */
+export interface RoleState {
+  readonly role: string;
+  readonly granted: boolean;
+}
+
+// ============================================
+// Router engine types
+// ============================================
+
+/** Top-level route state snapshot. Read by useRoute. */
+export interface RouteState {
+  readonly path: string;
+  readonly routeId: string;
+  readonly queryString: string;
+  readonly canGoBack: boolean;
+  readonly canGoForward: boolean;
+  readonly historyLength: number;
+  readonly historyIndex: number;
+  readonly pendingGuard: string;
+  readonly dataVersion: number;
+}
+
+/** Per-route match state snapshot. Read by useRouteMatch. */
+export interface RouteMatch {
+  readonly routeId: string;
+  readonly isMatch: boolean;
+  readonly isAllowed: boolean;
+}
+
+/** Breadcrumb item for navigation trails. */
+export interface BreadcrumbItem {
+  readonly label: string;
+  readonly path: string;
+}
+
+// ============================================
+// History engine types
+// ============================================
+
+/** Top-level history state snapshot. Read by useHistoryState. */
+export interface HistoryState {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  readonly undoCount: number;
+  readonly redoCount: number;
+  readonly isAtCheckpoint: boolean;
+  readonly hasUnsavedChanges: boolean;
+  readonly commandsSinceCheckpoint: number;
+  readonly maxHistory: number;
+  readonly dataVersion: number;
+}
+
+/** Command entry for undo/redo stack display. */
+export interface CommandEntry {
+  readonly index: number;
+  readonly label: string;
+}
+

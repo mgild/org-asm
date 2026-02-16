@@ -44,6 +44,20 @@ import { /* store factories */ } from 'org-asm/model';
 | Per-cell reactive state | `useTableCell` | `(handle, rowIndex, column)` | `CellState` |
 | Table-level state (pagination/sort) | `useTableState` | `(handle)` | `TableState` |
 | Share table across component tree | `createTableContext` | `<E>()` | `{ TableProvider, useTable, useRow, useCell, useTableStatus }` |
+| Rust-owned auth state | `useAuthEngine` | `(engine)` | `AuthHandle \| null` |
+| Auth-level state (login status) | `useAuthState` | `(handle)` | `AuthState` |
+| Per-permission reactivity | `usePermission` | `(handle, name)` | `PermissionState` |
+| Per-role reactivity | `useRole` | `(handle, role)` | `RoleState` |
+| Share auth across component tree | `createAuthContext` | `<E>()` | `{ AuthProvider, useAuth, useAuthStatus, usePermission, useRole }` |
+| Rust-owned router state | `useRouterEngine` | `(engine)` | `RouterHandle \| null` |
+| Route-level state (path/history) | `useRoute` | `(handle)` | `RouteState` |
+| Per-route match reactivity | `useRouteMatch` | `(handle, routeId)` | `RouteMatch` |
+| Share router across component tree | `createRouterContext` | `<E>()` | `{ RouterProvider, useRouter, useRoute, useRouteMatch }` |
+| Rust-owned undo/redo state | `useHistoryEngine` | `(engine)` | `HistoryHandle \| null` |
+| History-level state (undo/redo btns) | `useHistoryState` | `(handle)` | `HistoryState` |
+| Per-entry undo subscription | `useUndoEntry` | `(handle, index)` | `CommandEntry` |
+| Per-entry redo subscription | `useRedoEntry` | `(handle, index)` | `CommandEntry` |
+| Share history across component tree | `createHistoryContext` | `<E>()` | `{ HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem }` |
 | Catch WASM panics | `WasmErrorBoundary` | component | Renders fallback on error |
 | WebSocket/SSE connection | `useConnection` | `(config)` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM (frame-oriented) | `useWorker` | `(config)` | `{ loop, bridge, ready, error }` |
@@ -177,6 +191,74 @@ const { TableProvider, useTable, useRow, useCell, useTableStatus } = createTable
 // Read: const { toggleSort } = useTable(); const { selected } = useRow(0);
 ```
 
+### Rust-owned auth with per-permission reactivity
+```ts
+const engine = useMemo(() => new MyAuthEngine(), []);
+const handle = useAuthEngine(engine);
+const { status, isAuthenticated, userId } = useAuthState(handle);
+const { granted } = usePermission(handle, 'admin:write');
+
+// Login flow
+handle?.setAuthenticating();
+const tokens = await loginApi(credentials);
+handle?.setAuthenticated(tokens.access, tokens.refresh, tokens.accessExpiryMs, tokens.refreshExpiryMs, JSON.stringify(user));
+```
+
+### Auth context (no prop drilling)
+```ts
+const { AuthProvider, useAuth, useAuthStatus, usePermission, useRole } = createAuthContext<MyAuthEngine>();
+// Wrap: <AuthProvider engine={engine}>...</AuthProvider>
+// Read: const { logout } = useAuth(); const { isAuthenticated } = useAuthStatus();
+// RBAC: const { granted } = usePermission('admin:write');
+```
+
+### Rust-owned router with route guards
+```ts
+const engine = useMemo(() => new MyRouterEngine(), []);
+const handle = useRouterEngine(engine);
+const { path, routeId, canGoBack } = useRoute(handle);
+const { isMatch, isAllowed } = useRouteMatch(handle, 'dashboard');
+
+handle?.push('/users/123');
+handle?.back();
+
+// Two-phase guard protocol
+useEffect(() => {
+  const guard = handle?.getRouteState().pendingGuard;
+  if (!guard) return;
+  checkAuth(guard).then(ok => handle?.resolveGuard(ok));
+}, [handle?.getRouteState().pendingGuard]);
+```
+
+### Router context (no prop drilling)
+```ts
+const { RouterProvider, useRouter, useRoute, useRouteMatch } = createRouterContext<MyRouterEngine>();
+// Wrap: <RouterProvider engine={engine}>...</RouterProvider>
+// Read: const { push, back } = useRouter(); const { path } = useRoute();
+// Match: const { isMatch } = useRouteMatch('dashboard');
+```
+
+### Rust-owned undo/redo with checkpoint tracking
+```ts
+const engine = useMemo(() => new MyHistoryEngine(), []);
+const handle = useHistoryEngine(engine);
+const { canUndo, canRedo, hasUnsavedChanges } = useHistoryState(handle);
+const { label } = useUndoEntry(handle, 0);
+
+// Push command and undo it
+handle?.pushCommand(JSON.stringify({ type: 'setField', field: 'name', prev: 'A', next: 'B' }));
+const cmd = handle?.undo(); // returns JSON to reverse
+handle?.checkpoint(); // mark save point
+```
+
+### History context (no prop drilling)
+```ts
+const { HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem } = createHistoryContext<MyHistoryEngine>();
+// Wrap: <HistoryProvider engine={engine}>...</HistoryProvider>
+// Read: const { undo, redo } = useHistory(); const { canUndo } = useHistoryStatus();
+// Stack: const { label } = useUndoItem(0);
+```
+
 ### Search with debounce
 ```ts
 const results = useDebouncedWasmCall(
@@ -236,6 +318,20 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `useTableCell` | Per-cell subscription (edit value, error, dirty) |
 | `useTableState` | Table-level subscription (page, sort, filter, grouping) |
 | `createTableContext` | Shared table context factory (Provider + hooks) |
+| `useAuthEngine` | Create AuthHandle wrapping Rust IAuthEngine |
+| `useAuthState` | Auth-level subscription (status, isAuthenticated, userId) |
+| `usePermission` | Per-permission subscription (name, granted) |
+| `useRole` | Per-role subscription (role, granted) |
+| `createAuthContext` | Shared auth context factory (Provider + hooks) |
+| `useRouterEngine` | Create RouterHandle wrapping Rust IRouterEngine |
+| `useRoute` | Route-level subscription (path, routeId, canGoBack) |
+| `useRouteMatch` | Per-route match subscription (isMatch, isAllowed) |
+| `createRouterContext` | Shared router context factory (Provider + hooks) |
+| `useHistoryEngine` | Create HistoryHandle wrapping Rust IHistoryEngine |
+| `useHistoryState` | History-level subscription (canUndo, canRedo, hasUnsavedChanges) |
+| `useUndoEntry` | Per-entry undo subscription (index, label) |
+| `useRedoEntry` | Per-entry redo subscription (index, label) |
+| `createHistoryContext` | Shared history context factory (Provider + hooks) |
 | `WasmErrorBoundary` | Error boundary for WASM panics with reset |
 | `useConnection` | WebSocket/SSE with state tracking |
 | `useWorker` | Off-main-thread WASM via SharedArrayBuffer |
@@ -278,6 +374,18 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `RowState` | Per-row snapshot (rowIndex, selected) |
 | `CellState` | Per-cell snapshot (value, error, dirty) |
 | `TableState` | Table-level snapshot (page, sort, filter, selection, edits, grouping) |
+| `IAuthEngine` | Auth engine contract (set_tokens, set_authenticated, logout, has_permission, has_role) |
+| `AuthStatus` | Auth status enum (Unauthenticated, Authenticating, Authenticated, Refreshing, Error) |
+| `AuthState` | Auth-level snapshot (status, isAuthenticated, userId, permissionCount, roleCount) |
+| `PermissionState` | Per-permission snapshot (name, granted) |
+| `RoleState` | Per-role snapshot (role, granted) |
+| `IRouterEngine` | Router engine contract (navigate, replace, back, forward, is_match, resolve_guard) |
+| `RouteState` | Route-level snapshot (path, routeId, canGoBack, canGoForward, pendingGuard) |
+| `RouteMatch` | Per-route match snapshot (routeId, isMatch, isAllowed) |
+| `BreadcrumbItem` | Breadcrumb entry (label, path) |
+| `IHistoryEngine` | History engine contract (push_command, undo, redo, checkpoint, has_unsaved_changes) |
+| `HistoryState` | History-level snapshot (canUndo, canRedo, hasUnsavedChanges, isAtCheckpoint) |
+| `CommandEntry` | Undo/redo entry snapshot (index, label) |
 | `WasmNotifier` | Pub/sub interface for useWasmState |
 | `IEngine<F>` | Model contract (tick, addDataPoint, openAction) |
 | `IAnimationLoop<F>` | Loop contract (start, stop, addConsumer) |
@@ -292,6 +400,9 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 5. `guides/form-validation.md` — Rust-owned validation, useWasmCall + WasmResult
 5b. `guides/form-engine.md` — Full form engine: IFormEngine, per-field reactivity, wizards
 5c. `guides/data-table-engine.md` — Data table engine: ITableEngine, pagination, sort, filter, edit, group
+5d. `guides/auth-engine.md` — Auth engine: IAuthEngine, token management, RBAC, per-permission reactivity
+5e. `guides/router-engine.md` — Router engine: IRouterEngine, navigation, guards, breadcrumbs
+5f. `guides/history-engine.md` — History engine: IHistoryEngine, undo/redo, checkpoints, batches
 6. `guides/frame-buffer-design.md` — FlatBuffer frame protocol, zero-copy reads
 7. `guides/server-engine-pattern.md` — Server-side Rust engine, FlatBuffer broadcast
 

@@ -110,6 +110,20 @@ Real-time paths use the frame buffer and direct DOM writes — React never sees 
 | Per-cell table reactivity | `useTableCell` | `CellState` |
 | Table-level state | `useTableState` | `TableState` |
 | Share table across tree | `createTableContext` | `{ TableProvider, useTable, useRow, useCell, useTableStatus }` |
+| Rust-owned auth state | `useAuthEngine` | `AuthHandle \| null` |
+| Auth-level state | `useAuthState` | `AuthState` |
+| Per-permission reactivity | `usePermission` | `PermissionState` |
+| Per-role reactivity | `useRole` | `RoleState` |
+| Share auth across tree | `createAuthContext` | `{ AuthProvider, useAuth, useAuthStatus, usePermission, useRole }` |
+| Rust-owned router state | `useRouterEngine` | `RouterHandle \| null` |
+| Route-level state | `useRoute` | `RouteState` |
+| Per-route match reactivity | `useRouteMatch` | `RouteMatch` |
+| Share router across tree | `createRouterContext` | `{ RouterProvider, useRouter, useRoute, useRouteMatch }` |
+| Rust-owned undo/redo state | `useHistoryEngine` | `HistoryHandle \| null` |
+| History-level state | `useHistoryState` | `HistoryState` |
+| Per-entry undo subscription | `useUndoEntry` | `CommandEntry` |
+| Per-entry redo subscription | `useRedoEntry` | `CommandEntry` |
+| Share history across tree | `createHistoryContext` | `{ HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem }` |
 | Catch WASM panics | `WasmErrorBoundary` | React component |
 | Manage WebSocket/SSE | `useConnection` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM | `useWorker` | `{ loop, bridge, ready, error }` |
@@ -525,6 +539,35 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useTableState(handle)` | `TableState` | Table-level subscription -- page, sort, filter, selection, edits, grouping, dataVersion |
 | `createTableContext<E>()` | `{ TableProvider, useTable, useRow, useCell, useTableStatus }` | Context factory for sharing table across component tree without prop drilling |
 
+#### Auth Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useAuthEngine(engine)` | `AuthHandle \| null` | Create dispatch handle wrapping a Rust IAuthEngine -- setTokens, setAuthenticated, logout, setPermissions, setRoles, reset |
+| `useAuthState(handle)` | `AuthState` | Auth-level subscription -- status, isAuthenticated, userId, userDisplayName, permissionCount, roleCount, dataVersion |
+| `usePermission(handle, name)` | `PermissionState` | Per-permission subscription -- only re-renders when this permission's granted state changes |
+| `useRole(handle, role)` | `RoleState` | Per-role subscription -- only re-renders when this role's granted state changes |
+| `createAuthContext<E>()` | `{ AuthProvider, useAuth, useAuthStatus, usePermission, useRole }` | Context factory for sharing auth across component tree without prop drilling |
+
+#### Router Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useRouterEngine(engine)` | `RouterHandle \| null` | Create dispatch handle wrapping a Rust IRouterEngine -- push, replace, back, forward, setQueryParam, resolveGuard, reset |
+| `useRoute(handle)` | `RouteState` | Route-level subscription -- path, routeId, queryString, canGoBack, canGoForward, pendingGuard, dataVersion |
+| `useRouteMatch(handle, routeId)` | `RouteMatch` | Per-route match subscription -- only re-renders when this route's match/allowed state changes |
+| `createRouterContext<E>()` | `{ RouterProvider, useRouter, useRoute, useRouteMatch }` | Context factory for sharing router across component tree without prop drilling |
+
+#### History Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useHistoryEngine(engine)` | `HistoryHandle \| null` | Create dispatch handle wrapping a Rust IHistoryEngine -- pushCommand, pushBatch, undo, redo, checkpoint, clearHistory, reset |
+| `useHistoryState(handle)` | `HistoryState` | History-level subscription -- canUndo, canRedo, undoCount, redoCount, isAtCheckpoint, hasUnsavedChanges, dataVersion |
+| `useUndoEntry(handle, index)` | `CommandEntry` | Per-entry undo subscription -- only re-renders when this entry's label changes |
+| `useRedoEntry(handle, index)` | `CommandEntry` | Per-entry redo subscription -- only re-renders when this entry's label changes |
+| `createHistoryContext<E>()` | `{ HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem }` | Context factory for sharing history across component tree without prop drilling |
+
 #### Connection & Infrastructure
 
 | Hook | Returns | Description |
@@ -560,6 +603,9 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 | `IFormEngine` | Form engine contract: `set_field()`, `submit()`, `field_error()`, `is_valid()` |
 | `IWizardFormEngine` | Multi-step form extension: `step()`, `advance()`, `go_back()` |
 | `ITableEngine` | Table engine contract: `set_page()`, `toggle_sort()`, `set_filter()`, `toggle_row()`, `set_edit_value()`, `set_group_by()` |
+| `IAuthEngine` | Auth engine contract: `set_tokens()`, `set_authenticated()`, `logout()`, `has_permission()`, `has_role()`, `set_permissions()`, `set_roles()` |
+| `IRouterEngine` | Router engine contract: `navigate()`, `replace()`, `back()`, `forward()`, `is_match()`, `resolve_guard()`, `param()`, `query_param()` |
+| `IHistoryEngine` | History engine contract: `push_command()`, `push_batch()`, `undo()`, `redo()`, `checkpoint()`, `has_unsaved_changes()`, `set_max_history()` |
 | `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()`, `batch()` |
 
 ### View

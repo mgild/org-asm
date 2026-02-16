@@ -338,6 +338,275 @@ export interface IWizardFormEngine extends IFormEngine {
  * Implementors: Rust structs compiled to WASM with HashMap-based column
  * storage, FlatBuffer page data, and per-cell edit overlay.
  */
+// ============================================
+// Auth engine interfaces
+// ============================================
+
+/**
+ * IAuthEngine — Rust-owned authentication state contract.
+ *
+ * ALL auth state lives in the WASM engine: tokens, session lifecycle, RBAC
+ * permissions/roles, user profile. TypeScript is a dumb UI renderer that
+ * dispatches auth actions and reads state back via getSnapshot functions.
+ *
+ * State machine: Unauthenticated(0) → Authenticating(1) → Authenticated(2)
+ * Refreshing(3) is entered when tokens need renewal. Error(4) on failures.
+ *
+ * Implementors: Rust structs compiled to WASM with token storage, permission
+ * sets, and user profile JSON parsing.
+ */
+export interface IAuthEngine {
+  // --- Token management ---
+  /** Store access and refresh tokens with their expiry timestamps (ms). */
+  set_tokens(access: string, refresh: string, access_expiry_ms: number, refresh_expiry_ms: number): void;
+  /** Clear all tokens. */
+  clear_tokens(): void;
+  /** Get the current access token. */
+  access_token(): string;
+  /** Get the current refresh token. */
+  refresh_token(): string;
+  /** Whether the access token is expired at the given time. */
+  is_token_expired(now_ms: number): boolean;
+  /** Whether the refresh token is expired at the given time. */
+  is_refresh_expired(now_ms: number): boolean;
+  /** Get the Authorization header value (e.g. "Bearer <token>"). */
+  token_header(): string;
+  /** Access token expiry in ms since epoch. */
+  access_expiry_ms(): number;
+  /** Refresh token expiry in ms since epoch. */
+  refresh_expiry_ms(): number;
+
+  // --- State machine ---
+  /** Current auth status as u8: 0=Unauthenticated, 1=Authenticating, 2=Authenticated, 3=Refreshing, 4=Error. */
+  auth_status(): number;
+  /** Transition to Authenticating state. */
+  set_authenticating(): void;
+  /** Transition to Authenticated state with tokens and user data. */
+  set_authenticated(access: string, refresh: string, access_expiry_ms: number, refresh_expiry_ms: number, user_json: string): void;
+  /** Transition to Error state with a message. */
+  set_error(message: string): void;
+  /** Transition to Refreshing state. */
+  set_refreshing(): void;
+  /** Get the current error message (empty if no error). */
+  error_message(): string;
+
+  // --- Session ---
+  /** Clear all auth state (tokens, user, permissions, roles). */
+  logout(): void;
+  /** Whether the access token needs refreshing at the given time. */
+  refresh_needed(now_ms: number): boolean;
+  /** Whether the user is currently authenticated. */
+  is_authenticated(): boolean;
+  /** Session expiry timestamp in ms (the earlier of access/refresh expiry). */
+  session_expires_at(): number;
+
+  // --- RBAC ---
+  /** Set permissions from a JSON array of strings. */
+  set_permissions(json: string): void;
+  /** Check if a permission is granted. */
+  has_permission(name: string): boolean;
+  /** Check if a role is granted. */
+  has_role(role: string): boolean;
+  /** Number of granted permissions. */
+  permission_count(): number;
+  /** Number of granted roles. */
+  role_count(): number;
+  /** Set roles from a JSON array of strings. */
+  set_roles(json: string): void;
+  /** Clear all permissions and roles. */
+  clear_permissions(): void;
+
+  // --- User ---
+  /** Set user profile from JSON. Extracts id and display_name. */
+  set_user(json: string): void;
+  /** Get the user's ID. */
+  user_id(): string;
+  /** Get the user's display name. */
+  user_display_name(): string;
+  /** Get the raw user JSON. */
+  user_json(): string;
+  /** Clear user data. */
+  clear_user(): void;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all auth state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// Router engine interfaces
+// ============================================
+
+/**
+ * IRouterEngine — Rust-owned navigation state contract.
+ *
+ * ALL routing state lives in the WASM engine: current path, route matching,
+ * params, query strings, history stack, guards, breadcrumbs. TypeScript is
+ * a dumb renderer that dispatches navigation and reads route state back.
+ *
+ * Two-phase guard protocol: navigate() sets pending_guard if the route is
+ * guarded and not pre-approved. TS reads pending_guard(), runs async checks,
+ * then calls resolveGuard(true/false) to activate or revert.
+ *
+ * Implementors: Rust structs compiled to WASM with segment-based route
+ * matching, Vec-based history stack, and HashMap guard results.
+ */
+export interface IRouterEngine {
+  // --- Navigation ---
+  /** Navigate to a path (push to history). */
+  navigate(path: string): void;
+  /** Replace the current path in history. */
+  replace(path: string): void;
+  /** Go back one entry in history. */
+  back(): void;
+  /** Go forward one entry in history. */
+  forward(): void;
+
+  // --- Current route ---
+  /** Get the current path. */
+  current_path(): string;
+  /** Get the current matched route ID. */
+  current_route_id(): string;
+  /** Whether the given route ID matches the current route. */
+  is_match(route_id: string): boolean;
+
+  // --- Params ---
+  /** Get a route parameter by name. */
+  param(name: string): string;
+  /** Number of route parameters. */
+  param_count(): number;
+  /** Get the name of a parameter by index. */
+  param_name(index: number): string;
+
+  // --- Query ---
+  /** Get a query parameter by name. */
+  query_param(name: string): string;
+  /** Get the full query string. */
+  query_string(): string;
+  /** Set a query parameter. */
+  set_query_param(name: string, value: string): void;
+  /** Clear all query parameters. */
+  clear_query_params(): void;
+  /** Number of query parameters. */
+  query_param_count(): number;
+  /** Get the name of a query parameter by index. */
+  query_param_name(index: number): string;
+
+  // --- History ---
+  /** Whether there is a previous entry in the history. */
+  can_go_back(): boolean;
+  /** Whether there is a next entry in the history. */
+  can_go_forward(): boolean;
+  /** Total number of entries in the history stack. */
+  history_length(): number;
+  /** Current index within the history stack. */
+  history_index(): number;
+
+  // --- Guards ---
+  /** Get the pending guard route ID (empty if no guard pending). */
+  pending_guard(): string;
+  /** Resolve a pending guard (true = allow, false = deny). */
+  resolve_guard(allowed: boolean): void;
+  /** Pre-approve or deny a route guard result. */
+  set_guard_result(route_id: string, allowed: boolean): void;
+  /** Whether a route is allowed by its guard. */
+  is_route_allowed(route_id: string): boolean;
+
+  // --- Breadcrumbs ---
+  /** Number of breadcrumb entries for the current route. */
+  breadcrumb_count(): number;
+  /** Label for a breadcrumb at the given index. */
+  breadcrumb_label(index: number): string;
+  /** Path for a breadcrumb at the given index. */
+  breadcrumb_path(index: number): string;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all router state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// History (undo/redo) engine interfaces
+// ============================================
+
+/**
+ * IHistoryEngine — Rust-owned undo/redo state contract.
+ *
+ * ALL history state lives in the WASM engine: undo/redo stacks, checkpoints,
+ * capacity management. Commands are opaque JSON — the history engine doesn't
+ * know HOW to undo; it stores commands and returns them when undo/redo is
+ * called. TypeScript reads the returned JSON and applies reversal on the
+ * target engine. This makes it composable with any engine.
+ *
+ * Implementors: Rust structs compiled to WASM with Vec-based undo/redo
+ * stacks, checkpoint tracking, and capacity enforcement.
+ */
+export interface IHistoryEngine {
+  // --- Push ---
+  /** Push a command onto the undo stack (clears redo stack). */
+  push_command(command_json: string): void;
+  /** Push a batch of commands as a single undo entry. */
+  push_batch(commands_json: string): void;
+
+  // --- Undo/Redo ---
+  /** Pop the last command from the undo stack, push to redo. Returns the command JSON. */
+  undo(): string;
+  /** Pop the last command from the redo stack, push to undo. Returns the command JSON. */
+  redo(): string;
+  /** Whether there are commands to undo. */
+  can_undo(): boolean;
+  /** Whether there are commands to redo. */
+  can_redo(): boolean;
+
+  // --- Stack info ---
+  /** Number of commands in the undo stack. */
+  undo_count(): number;
+  /** Number of commands in the redo stack. */
+  redo_count(): number;
+  /** Label for an undo entry at the given index (0 = most recent). */
+  undo_label(index: number): string;
+  /** Label for a redo entry at the given index (0 = most recent). */
+  redo_label(index: number): string;
+  /** Get the last command that was pushed (without popping). */
+  last_command(): string;
+
+  // --- Capacity ---
+  /** Maximum number of history entries. */
+  max_history(): number;
+  /** Set the maximum number of history entries. */
+  set_max_history(max: number): void;
+
+  // --- Checkpoints ---
+  /** Mark the current state as a checkpoint (save point). */
+  checkpoint(): void;
+  /** Whether the current undo stack position is at a checkpoint. */
+  is_at_checkpoint(): boolean;
+  /** Whether there are changes since the last checkpoint. */
+  has_unsaved_changes(): boolean;
+  /** Number of commands since the last checkpoint. */
+  commands_since_checkpoint(): number;
+
+  // --- Clear ---
+  /** Clear the entire undo stack. */
+  clear_history(): void;
+  /** Clear only the redo stack. */
+  clear_redo(): void;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all history state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// Table engine interfaces
+// ============================================
+
 export interface ITableEngine {
   // --- Page data (FlatBuffer zero-copy) ---
   /** Pointer to FlatBuffer bytes in WASM memory. */

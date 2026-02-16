@@ -53,6 +53,9 @@
     "model/engine-template.rs",
     "model/form-engine-template.rs",
     "model/table-engine-template.rs",
+    "model/auth-engine-template.rs",
+    "model/router-engine-template.rs",
+    "model/history-engine-template.rs",
     "model/Cargo.template.toml",
     "shared/lib-template.rs",
     "shared/validation-template.rs",
@@ -92,7 +95,10 @@
     "validation",
     "forms",
     "state-management",
-    "data-table"
+    "data-table",
+    "auth",
+    "router",
+    "undo-redo"
   ],
   "license": "MIT",
   "dependencies": {
