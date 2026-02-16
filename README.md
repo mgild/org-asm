@@ -101,6 +101,10 @@ Real-time paths use the frame buffer and direct DOM writes — React never sees 
 | Stream chunked results | `useWasmStream` | `{ chunks, done, error }` |
 | Full state management | `useWasmReducer` | `[S, dispatch]` |
 | Share engine across tree | `createWasmContext` | `{ WasmProvider, useEngine, useNotifier }` |
+| Rust-owned form state | `useFormEngine` | `FormHandle \| null` |
+| Per-field form reactivity | `useFormField` | `FieldState` |
+| Form-level state | `useFormState` | `FormState` |
+| Share form across tree | `createFormContext` | `{ FormProvider, useForm, useField, useFormStatus }` |
 | Catch WASM panics | `WasmErrorBoundary` | React component |
 | Manage WebSocket/SSE | `useConnection` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM | `useWorker` | `{ loop, bridge, ready, error }` |
@@ -497,6 +501,15 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `createWasmContext<E>()` | `{ WasmProvider, useEngine, useNotifier }` | Factory for sharing engine + notifier across component tree without prop drilling |
 | `WasmErrorBoundary` | React component | Error boundary for WASM panics — catches errors, shows fallback, supports reset |
 
+#### Form Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useFormEngine(engine)` | `FormHandle \| null` | Create dispatch handle wrapping a Rust IFormEngine — setField, touchField, submit, reset |
+| `useFormField(handle, name)` | `FieldState` | Per-field subscription — only re-renders when this field changes (value, error, showError) |
+| `useFormState(handle)` | `FormState` | Form-level subscription — isValid, isDirty, canSubmit, hasBeenSubmitted, dataVersion |
+| `createFormContext<E>()` | `{ FormProvider, useForm, useField, useFormStatus }` | Context factory for sharing form across component tree without prop drilling |
+
 #### Connection & Infrastructure
 
 | Hook | Returns | Description |
@@ -529,6 +542,8 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 | `IEffectApplicator` | Extends `IFrameConsumer` with `bind()`, `unbind()`, `getCSSEffects()` |
 | `IWasmIngestEngine` | WASM-side message parsing via `ingest_message()` |
 | `IWasmBinaryIngestEngine` | Binary frame ingestion via `ingest_frame()` for server engine pipeline |
+| `IFormEngine` | Form engine contract: `set_field()`, `submit()`, `field_error()`, `is_valid()` |
+| `IWizardFormEngine` | Multi-step form extension: `step()`, `advance()`, `go_back()` |
 | `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()`, `batch()` |
 
 ### View

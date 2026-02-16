@@ -119,3 +119,26 @@ export interface ConnectionError {
   readonly timestamp: number;
 }
 
+// ============================================
+// Form engine types
+// ============================================
+
+/** Per-field state snapshot. Read by useFormField. */
+export interface FieldState {
+  readonly value: string;
+  readonly error: string;
+  readonly touched: boolean;
+  readonly dirty: boolean;
+  /** (touched || submitted) && error !== '' */
+  readonly showError: boolean;
+}
+
+/** Top-level form state snapshot. Read by useFormState. */
+export interface FormState {
+  readonly isValid: boolean;
+  readonly isDirty: boolean;
+  readonly canSubmit: boolean;
+  readonly hasBeenSubmitted: boolean;
+  readonly dataVersion: number;
+}
+

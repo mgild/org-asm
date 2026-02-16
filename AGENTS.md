@@ -35,6 +35,10 @@ import { /* store factories */ } from 'org-asm/model';
 | Streaming/chunked results | `useWasmStream` | `(fn, deps)` | `{ chunks, done, error }` |
 | Full state management (no tick loop) | `useWasmReducer` | `(engine, config)` | `[S, dispatch]` |
 | Share engine across component tree | `createWasmContext` | `<E>()` | `{ WasmProvider, useEngine, useNotifier }` |
+| Rust-owned form state | `useFormEngine` | `(engine)` | `FormHandle \| null` |
+| Per-field reactive state | `useFormField` | `(handle, name)` | `FieldState` |
+| Form-level state (submit btn) | `useFormState` | `(handle)` | `FormState` |
+| Share form across component tree | `createFormContext` | `<E>()` | `{ FormProvider, useForm, useField, useFormStatus }` |
 | Catch WASM panics | `WasmErrorBoundary` | component | Renders fallback on error |
 | WebSocket/SSE connection | `useConnection` | `(config)` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM (frame-oriented) | `useWorker` | `(config)` | `{ loop, bridge, ready, error }` |
@@ -124,6 +128,26 @@ const [state, dispatch] = useWasmReducer(engine, {
 });
 ```
 
+### Rust-owned form with per-field reactivity
+```ts
+const engine = useMemo(() => new MyFormEngine(), []);
+const handle = useFormEngine(engine);
+const { value, showError, error } = useFormField(handle, 'email');
+const { canSubmit } = useFormState(handle);
+
+<input value={value} onChange={e => handle?.setField('email', e.target.value)}
+       onBlur={() => handle?.touchField('email')} />
+{showError && <span>{error}</span>}
+<button disabled={!canSubmit} onClick={() => handle?.submit()}>Submit</button>
+```
+
+### Form context (no prop drilling)
+```ts
+const { FormProvider, useForm, useField, useFormStatus } = createFormContext<MyFormEngine>();
+// Wrap: <FormProvider engine={engine}>...</FormProvider>
+// Read: const { setField } = useForm(); const { value } = useField('name');
+```
+
 ### Search with debounce
 ```ts
 const results = useDebouncedWasmCall(
@@ -174,6 +198,10 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `useWasmStream` | Streaming chunked results |
 | `useWasmReducer` | Rust-first useReducer |
 | `createWasmContext` | Shared engine context factory |
+| `useFormEngine` | Create FormHandle wrapping Rust IFormEngine |
+| `useFormField` | Per-field subscription (value, error, showError) |
+| `useFormState` | Form-level subscription (isValid, canSubmit) |
+| `createFormContext` | Shared form context factory (Provider + hooks) |
 | `WasmErrorBoundary` | Error boundary for WASM panics with reset |
 | `useConnection` | WebSocket/SSE with state tracking |
 | `useWorker` | Off-main-thread WASM via SharedArrayBuffer |
@@ -207,6 +235,10 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | Export | Purpose |
 |--------|---------|
 | `WasmResult<T>` | Discriminated union for fallible WASM methods |
+| `IFormEngine` | Form engine contract (set_field, submit, validate) |
+| `IWizardFormEngine` | Multi-step form extension (step, advance, go_back) |
+| `FieldState` | Per-field snapshot (value, error, touched, dirty, showError) |
+| `FormState` | Form-level snapshot (isValid, isDirty, canSubmit) |
 | `WasmNotifier` | Pub/sub interface for useWasmState |
 | `IEngine<F>` | Model contract (tick, addDataPoint, openAction) |
 | `IAnimationLoop<F>` | Loop contract (start, stop, addConsumer) |
@@ -219,6 +251,7 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 3. `guides/realtime-rendering.md` — 60fps patterns, animation loop, canvas plugins
 4. `guides/data-pipeline.md` — WebSocket to engine to React data flow
 5. `guides/form-validation.md` — Rust-owned validation, useWasmCall + WasmResult
+5b. `guides/form-engine.md` — Full form engine: IFormEngine, per-field reactivity, wizards
 6. `guides/frame-buffer-design.md` — FlatBuffer frame protocol, zero-copy reads
 7. `guides/server-engine-pattern.md` — Server-side Rust engine, FlatBuffer broadcast
 

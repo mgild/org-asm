@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1771177225842" clover="3.2.0">
-  <project timestamp="1771177225842" name="All files">
-    <metrics statements="250" coveredstatements="250" conditionals="108" coveredconditionals="108" methods="61" coveredmethods="61" elements="419" coveredelements="419" complexity="0" loc="250" ncloc="250" packages="3" files="12" classes="12"/>
+<coverage generated="1771270338439" clover="3.2.0">
+  <project timestamp="1771270338439" name="All files">
+    <metrics statements="297" coveredstatements="297" conditionals="123" coveredconditionals="123" methods="83" coveredmethods="83" elements="503" coveredelements="503" complexity="0" loc="297" ncloc="297" packages="3" files="16" classes="16"/>
     <package name="controller">
       <metrics statements="85" coveredstatements="85" conditionals="38" coveredconditionals="38" methods="16" coveredmethods="16"/>
       <file name="WasmTaskWorker.ts" path="/Users/mgild/projects/org-asm/controller/WasmTaskWorker.ts">
@@ -110,7 +110,7 @@
       </file>
     </package>
     <package name="react">
-      <metrics statements="158" coveredstatements="158" conditionals="68" coveredconditionals="68" methods="44" coveredmethods="44"/>
+      <metrics statements="205" coveredstatements="205" conditionals="83" coveredconditionals="83" methods="66" coveredmethods="66"/>
       <file name="WasmErrorBoundary.ts" path="/Users/mgild/projects/org-asm/react/WasmErrorBoundary.ts">
         <metrics statements="14" coveredstatements="14" conditionals="4" coveredconditionals="4" methods="5" coveredmethods="5"/>
         <line num="53" count="12" type="stmt"/>
@@ -127,6 +127,21 @@
         <line num="75" count="6" type="stmt"/>
         <line num="77" count="4" type="stmt"/>
         <line num="79" count="13" type="stmt"/>
+      </file>
+      <file name="createFormContext.ts" path="/Users/mgild/projects/org-asm/react/createFormContext.ts">
+        <metrics statements="12" coveredstatements="12" conditionals="2" coveredconditionals="2" methods="5" coveredmethods="5"/>
+        <line num="45" count="9" type="stmt"/>
+        <line num="48" count="5" type="stmt"/>
+        <line num="49" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="50" count="2" type="stmt"/>
+        <line num="52" count="3" type="stmt"/>
+        <line num="56" count="5" type="stmt"/>
+        <line num="57" count="5" type="stmt"/>
+        <line num="61" count="4" type="stmt"/>
+        <line num="62" count="4" type="stmt"/>
+        <line num="66" count="6" type="stmt"/>
+        <line num="67" count="6" type="stmt"/>
+        <line num="70" count="9" type="stmt"/>
       </file>
       <file name="createWasmContext.ts" path="/Users/mgild/projects/org-asm/react/createWasmContext.ts">
         <metrics statements="12" coveredstatements="12" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
@@ -177,6 +192,50 @@
         <line num="40" count="8" type="stmt"/>
         <line num="45" count="14" type="stmt"/>
       </file>
+      <file name="useFormEngine.ts" path="/Users/mgild/projects/org-asm/react/useFormEngine.ts">
+        <metrics statements="15" coveredstatements="15" conditionals="2" coveredconditionals="2" methods="9" coveredmethods="9"/>
+        <line num="37" count="15" type="stmt"/>
+        <line num="39" count="15" type="stmt"/>
+        <line num="40" count="15" type="cond" truecount="2" falsecount="0"/>
+        <line num="42" count="13" type="stmt"/>
+        <line num="46" count="5" type="stmt"/>
+        <line num="47" count="5" type="stmt"/>
+        <line num="50" count="2" type="stmt"/>
+        <line num="51" count="2" type="stmt"/>
+        <line num="54" count="3" type="stmt"/>
+        <line num="55" count="3" type="stmt"/>
+        <line num="56" count="3" type="stmt"/>
+        <line num="59" count="1" type="stmt"/>
+        <line num="60" count="1" type="stmt"/>
+        <line num="63" count="2" type="stmt"/>
+        <line num="66" count="2" type="stmt"/>
+      </file>
+      <file name="useFormField.ts" path="/Users/mgild/projects/org-asm/react/useFormField.ts">
+        <metrics statements="13" coveredstatements="13" conditionals="7" coveredconditionals="7" methods="4" coveredmethods="4"/>
+        <line num="17" count="2" type="stmt"/>
+        <line num="25" count="3" type="stmt"/>
+        <line num="31" count="14" type="cond" truecount="2" falsecount="0"/>
+        <line num="33" count="14" type="stmt"/>
+        <line num="36" count="44" type="cond" truecount="2" falsecount="0"/>
+        <line num="37" count="35" type="stmt"/>
+        <line num="38" count="35" type="stmt"/>
+        <line num="39" count="35" type="stmt"/>
+        <line num="40" count="35" type="stmt"/>
+        <line num="41" count="35" type="stmt"/>
+        <line num="42" count="35" type="stmt"/>
+        <line num="43" count="35" type="cond" truecount="3" falsecount="0"/>
+        <line num="44" count="44" type="stmt"/>
+      </file>
+      <file name="useFormState.ts" path="/Users/mgild/projects/org-asm/react/useFormState.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="24" count="2" type="stmt"/>
+        <line num="29" count="14" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="14" type="stmt"/>
+        <line num="34" count="47" type="cond" truecount="2" falsecount="0"/>
+        <line num="35" count="41" type="stmt"/>
+        <line num="36" count="41" type="stmt"/>
+      </file>
       <file name="useWasmCall.ts" path="/Users/mgild/projects/org-asm/react/useWasmCall.ts">
         <metrics statements="1" coveredstatements="1" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
         <line num="17" count="9" type="stmt"/>
@@ -203,42 +262,42 @@
       </file>
       <file name="useWasmSelector.ts" path="/Users/mgild/projects/org-asm/react/useWasmSelector.ts">
         <metrics statements="22" coveredstatements="22" conditionals="21" coveredconditionals="21" methods="3" coveredmethods="3"/>
-        <line num="30" count="54" type="cond" truecount="2" falsecount="0"/>
-        <line num="31" count="26" type="cond" truecount="4" falsecount="0"/>
-        <line num="32" count="25" type="cond" truecount="4" falsecount="0"/>
-        <line num="34" count="24" type="stmt"/>
-        <line num="35" count="24" type="stmt"/>
-        <line num="36" count="24" type="cond" truecount="2" falsecount="0"/>
-        <line num="38" count="23" type="stmt"/>
-        <line num="39" count="25" type="cond" truecount="2" falsecount="0"/>
-        <line num="40" count="24" type="cond" truecount="2" falsecount="0"/>
-        <line num="42" count="18" type="stmt"/>
-        <line num="50" count="20" type="stmt"/>
-        <line num="51" count="20" type="stmt"/>
-        <line num="52" count="20" type="stmt"/>
-        <line num="53" count="20" type="stmt"/>
-        <line num="54" count="20" type="stmt"/>
-        <line num="56" count="20" type="stmt"/>
-        <line num="57" count="72" type="stmt"/>
-        <line num="58" count="72" type="cond" truecount="4" falsecount="0"/>
-        <line num="59" count="52" type="stmt"/>
-        <line num="61" count="20" type="stmt"/>
-        <line num="62" count="20" type="stmt"/>
-        <line num="65" count="20" type="stmt"/>
+        <line num="30" count="124" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="86" type="cond" truecount="4" falsecount="0"/>
+        <line num="32" count="85" type="cond" truecount="4" falsecount="0"/>
+        <line num="34" count="84" type="stmt"/>
+        <line num="35" count="84" type="stmt"/>
+        <line num="36" count="84" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="83" type="stmt"/>
+        <line num="39" count="304" type="cond" truecount="2" falsecount="0"/>
+        <line num="40" count="303" type="cond" truecount="2" falsecount="0"/>
+        <line num="42" count="71" type="stmt"/>
+        <line num="50" count="48" type="stmt"/>
+        <line num="51" count="48" type="stmt"/>
+        <line num="52" count="48" type="stmt"/>
+        <line num="53" count="48" type="stmt"/>
+        <line num="54" count="48" type="stmt"/>
+        <line num="56" count="48" type="stmt"/>
+        <line num="57" count="163" type="stmt"/>
+        <line num="58" count="163" type="cond" truecount="4" falsecount="0"/>
+        <line num="59" count="115" type="stmt"/>
+        <line num="61" count="48" type="stmt"/>
+        <line num="62" count="48" type="stmt"/>
+        <line num="65" count="48" type="stmt"/>
       </file>
       <file name="useWasmState.ts" path="/Users/mgild/projects/org-asm/react/useWasmState.ts">
         <metrics statements="20" coveredstatements="20" conditionals="4" coveredconditionals="4" methods="7" coveredmethods="7"/>
-        <line num="41" count="30" type="stmt"/>
-        <line num="42" count="30" type="stmt"/>
-        <line num="43" count="30" type="stmt"/>
-        <line num="46" count="29" type="stmt"/>
-        <line num="49" count="30" type="stmt"/>
-        <line num="51" count="32" type="stmt"/>
-        <line num="52" count="32" type="stmt"/>
-        <line num="55" count="30" type="cond" truecount="2" falsecount="0"/>
+        <line num="41" count="57" type="stmt"/>
+        <line num="42" count="57" type="stmt"/>
+        <line num="43" count="57" type="stmt"/>
+        <line num="46" count="44" type="stmt"/>
+        <line num="49" count="57" type="stmt"/>
+        <line num="51" count="52" type="stmt"/>
+        <line num="52" count="52" type="stmt"/>
+        <line num="55" count="48" type="cond" truecount="2" falsecount="0"/>
         <line num="56" count="8" type="stmt"/>
         <line num="57" count="8" type="stmt"/>
-        <line num="59" count="22" type="stmt"/>
+        <line num="59" count="40" type="stmt"/>
         <line num="62" count="6" type="stmt"/>
         <line num="63" count="6" type="stmt"/>
         <line num="64" count="6" type="stmt"/>

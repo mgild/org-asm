@@ -254,3 +254,67 @@ export interface IWasmIngestEngine {
 export interface IWasmBinaryIngestEngine {
   ingest_frame(bytes: Uint8Array): void;
 }
+
+// ============================================
+// Form engine interfaces
+// ============================================
+
+/**
+ * IFormEngine — Rust-owned form state contract.
+ *
+ * ALL form state lives in the WASM engine: field values, errors, touched/dirty
+ * tracking, validation, submission lifecycle. TypeScript is a dumb input renderer
+ * that calls set_field/touch_field and reads back state via getSnapshot functions.
+ *
+ * Implementors: Rust structs compiled to WASM that use HashMap-based field storage
+ * with per-field validation dispatched by field name.
+ */
+export interface IFormEngine {
+  /** Set a field value. Triggers validation and dirty tracking. */
+  set_field(name: string, value: string): void;
+  /** Mark a field as touched (blurred). */
+  touch_field(name: string): void;
+  /** Read the current value of a field. */
+  field_value(name: string): string;
+  /** Read the validation error for a field. Empty string = valid. */
+  field_error(name: string): string;
+  /** Whether a field has been touched (blurred). */
+  field_touched(name: string): boolean;
+  /** Whether a field value differs from its initial value. */
+  field_dirty(name: string): boolean;
+  /** Whether ALL fields pass validation. */
+  is_valid(): boolean;
+  /** Whether ANY field is dirty. */
+  is_dirty(): boolean;
+  /** Whether the form can be submitted (valid + dirty, or valid + never submitted). */
+  can_submit(): boolean;
+  /** Whether submit() has been called at least once. */
+  has_been_submitted(): boolean;
+  /** Touch all fields, validate all, set submitted flag. Returns is_valid(). */
+  submit(): boolean;
+  /** Reset all fields to initial values, clear touched/dirty/submitted. */
+  reset(): void;
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+}
+
+/**
+ * IWizardFormEngine — Multi-step form (wizard) extension.
+ *
+ * Adds step navigation on top of IFormEngine. Validation can be scoped
+ * to the current step so users can advance without filling future steps.
+ */
+export interface IWizardFormEngine extends IFormEngine {
+  /** Current step index (0-based). */
+  step(): number;
+  /** Total number of steps. */
+  step_count(): number;
+  /** Whether the current step's fields are valid and advance is allowed. */
+  can_advance(): boolean;
+  /** Whether there is a previous step. */
+  can_go_back(): boolean;
+  /** Validate current step, advance if valid. Returns success. */
+  advance(): boolean;
+  /** Go to the previous step. Returns success. */
+  go_back(): boolean;
+}
