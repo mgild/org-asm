@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1771275067312" clover="3.2.0">
-  <project timestamp="1771275067312" name="All files">
-    <metrics statements="577" coveredstatements="577" conditionals="199" coveredconditionals="199" methods="236" coveredmethods="236" elements="1012" coveredelements="1012" complexity="0" loc="577" ncloc="577" packages="3" files="35" classes="35"/>
+<coverage generated="1771276616425" clover="3.2.0">
+  <project timestamp="1771276616425" name="All files">
+    <metrics statements="833" coveredstatements="833" conditionals="259" coveredconditionals="259" methods="370" coveredmethods="370" elements="1462" coveredelements="1462" complexity="0" loc="833" ncloc="833" packages="3" files="51" classes="51"/>
     <package name="controller">
       <metrics statements="85" coveredstatements="85" conditionals="38" coveredconditionals="38" methods="16" coveredmethods="16"/>
       <file name="WasmTaskWorker.ts" path="/Users/mgild/projects/org-asm/controller/WasmTaskWorker.ts">
@@ -97,27 +97,51 @@
       </file>
     </package>
     <package name="core">
-      <metrics statements="14" coveredstatements="14" conditionals="6" coveredconditionals="6" methods="3" coveredmethods="3"/>
+      <metrics statements="38" coveredstatements="38" conditionals="14" coveredconditionals="14" methods="7" coveredmethods="7"/>
       <file name="types.ts" path="/Users/mgild/projects/org-asm/core/types.ts">
-        <metrics statements="14" coveredstatements="14" conditionals="6" coveredconditionals="6" methods="3" coveredmethods="3"/>
-        <line num="76" count="6" type="stmt"/>
-        <line num="77" count="6" type="stmt"/>
-        <line num="84" count="6" type="cond" truecount="2" falsecount="0"/>
-        <line num="85" count="6" type="stmt"/>
-        <line num="86" count="6" type="stmt"/>
-        <line num="87" count="6" type="stmt"/>
-        <line num="88" count="6" type="stmt"/>
-        <line num="150" count="6" type="cond" truecount="2" falsecount="0"/>
-        <line num="189" count="6" type="cond" truecount="2" falsecount="0"/>
-        <line num="190" count="6" type="stmt"/>
-        <line num="191" count="6" type="stmt"/>
-        <line num="192" count="6" type="stmt"/>
-        <line num="193" count="6" type="stmt"/>
-        <line num="194" count="6" type="stmt"/>
+        <metrics statements="38" coveredstatements="38" conditionals="14" coveredconditionals="14" methods="7" coveredmethods="7"/>
+        <line num="76" count="8" type="stmt"/>
+        <line num="77" count="8" type="stmt"/>
+        <line num="84" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="85" count="8" type="stmt"/>
+        <line num="86" count="8" type="stmt"/>
+        <line num="87" count="8" type="stmt"/>
+        <line num="88" count="8" type="stmt"/>
+        <line num="150" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="189" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="190" count="8" type="stmt"/>
+        <line num="191" count="8" type="stmt"/>
+        <line num="192" count="8" type="stmt"/>
+        <line num="193" count="8" type="stmt"/>
+        <line num="194" count="8" type="stmt"/>
+        <line num="301" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="302" count="8" type="stmt"/>
+        <line num="303" count="8" type="stmt"/>
+        <line num="304" count="8" type="stmt"/>
+        <line num="305" count="8" type="stmt"/>
+        <line num="306" count="8" type="stmt"/>
+        <line num="307" count="8" type="stmt"/>
+        <line num="308" count="8" type="stmt"/>
+        <line num="309" count="8" type="stmt"/>
+        <line num="310" count="8" type="stmt"/>
+        <line num="364" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="365" count="8" type="stmt"/>
+        <line num="366" count="8" type="stmt"/>
+        <line num="367" count="8" type="stmt"/>
+        <line num="368" count="8" type="stmt"/>
+        <line num="369" count="8" type="stmt"/>
+        <line num="373" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="374" count="8" type="stmt"/>
+        <line num="375" count="8" type="stmt"/>
+        <line num="379" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="380" count="8" type="stmt"/>
+        <line num="381" count="8" type="stmt"/>
+        <line num="382" count="8" type="stmt"/>
+        <line num="383" count="8" type="stmt"/>
       </file>
     </package>
     <package name="react">
-      <metrics statements="478" coveredstatements="478" conditionals="155" coveredconditionals="155" methods="217" coveredmethods="217"/>
+      <metrics statements="710" coveredstatements="710" conditionals="207" coveredconditionals="207" methods="347" coveredmethods="347"/>
       <file name="WasmErrorBoundary.ts" path="/Users/mgild/projects/org-asm/react/WasmErrorBoundary.ts">
         <metrics statements="14" coveredstatements="14" conditionals="4" coveredconditionals="4" methods="5" coveredmethods="5"/>
         <line num="53" count="12" type="stmt"/>
@@ -134,6 +158,21 @@
         <line num="75" count="6" type="stmt"/>
         <line num="77" count="4" type="stmt"/>
         <line num="79" count="13" type="stmt"/>
+      </file>
+      <file name="createApiContext.ts" path="/Users/mgild/projects/org-asm/react/createApiContext.ts">
+        <metrics statements="12" coveredstatements="12" conditionals="2" coveredconditionals="2" methods="5" coveredmethods="5"/>
+        <line num="45" count="9" type="stmt"/>
+        <line num="48" count="6" type="stmt"/>
+        <line num="49" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="50" count="2" type="stmt"/>
+        <line num="52" count="4" type="stmt"/>
+        <line num="56" count="5" type="stmt"/>
+        <line num="57" count="5" type="stmt"/>
+        <line num="61" count="4" type="stmt"/>
+        <line num="62" count="4" type="stmt"/>
+        <line num="66" count="7" type="stmt"/>
+        <line num="67" count="7" type="stmt"/>
+        <line num="70" count="9" type="stmt"/>
       </file>
       <file name="createAuthContext.ts" path="/Users/mgild/projects/org-asm/react/createAuthContext.ts">
         <metrics statements="14" coveredstatements="14" conditionals="2" coveredconditionals="2" methods="6" coveredmethods="6"/>
@@ -184,7 +223,52 @@
         <line num="71" count="7" type="stmt"/>
         <line num="74" count="11" type="stmt"/>
       </file>
+      <file name="createIntlContext.ts" path="/Users/mgild/projects/org-asm/react/createIntlContext.ts">
+        <metrics statements="12" coveredstatements="12" conditionals="2" coveredconditionals="2" methods="5" coveredmethods="5"/>
+        <line num="45" count="9" type="stmt"/>
+        <line num="48" count="6" type="stmt"/>
+        <line num="49" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="50" count="2" type="stmt"/>
+        <line num="52" count="4" type="stmt"/>
+        <line num="56" count="5" type="stmt"/>
+        <line num="57" count="5" type="stmt"/>
+        <line num="61" count="6" type="stmt"/>
+        <line num="62" count="6" type="stmt"/>
+        <line num="66" count="6" type="stmt"/>
+        <line num="67" count="6" type="stmt"/>
+        <line num="70" count="9" type="stmt"/>
+      </file>
       <file name="createRouterContext.ts" path="/Users/mgild/projects/org-asm/react/createRouterContext.ts">
+        <metrics statements="12" coveredstatements="12" conditionals="2" coveredconditionals="2" methods="5" coveredmethods="5"/>
+        <line num="42" count="9" type="stmt"/>
+        <line num="45" count="5" type="stmt"/>
+        <line num="46" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="47" count="2" type="stmt"/>
+        <line num="49" count="3" type="stmt"/>
+        <line num="53" count="5" type="stmt"/>
+        <line num="54" count="5" type="stmt"/>
+        <line num="58" count="4" type="stmt"/>
+        <line num="59" count="4" type="stmt"/>
+        <line num="63" count="6" type="stmt"/>
+        <line num="64" count="6" type="stmt"/>
+        <line num="67" count="9" type="stmt"/>
+      </file>
+      <file name="createSearchContext.ts" path="/Users/mgild/projects/org-asm/react/createSearchContext.ts">
+        <metrics statements="12" coveredstatements="12" conditionals="2" coveredconditionals="2" methods="5" coveredmethods="5"/>
+        <line num="45" count="9" type="stmt"/>
+        <line num="48" count="6" type="stmt"/>
+        <line num="49" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="50" count="2" type="stmt"/>
+        <line num="52" count="4" type="stmt"/>
+        <line num="56" count="5" type="stmt"/>
+        <line num="57" count="5" type="stmt"/>
+        <line num="61" count="6" type="stmt"/>
+        <line num="62" count="6" type="stmt"/>
+        <line num="66" count="6" type="stmt"/>
+        <line num="67" count="6" type="stmt"/>
+        <line num="70" count="9" type="stmt"/>
+      </file>
+      <file name="createStateMachineContext.ts" path="/Users/mgild/projects/org-asm/react/createStateMachineContext.ts">
         <metrics statements="12" coveredstatements="12" conditionals="2" coveredconditionals="2" methods="5" coveredmethods="5"/>
         <line num="42" count="9" type="stmt"/>
         <line num="45" count="5" type="stmt"/>
@@ -230,6 +314,56 @@
         <line num="67" count="1" type="stmt"/>
         <line num="71" count="3" type="stmt"/>
         <line num="78" count="5" type="stmt"/>
+      </file>
+      <file name="useApiEngine.ts" path="/Users/mgild/projects/org-asm/react/useApiEngine.ts">
+        <metrics statements="37" coveredstatements="37" conditionals="2" coveredconditionals="2" methods="24" coveredmethods="24"/>
+        <line num="55" count="27" type="stmt"/>
+        <line num="57" count="27" type="stmt"/>
+        <line num="58" count="27" type="cond" truecount="2" falsecount="0"/>
+        <line num="60" count="25" type="stmt"/>
+        <line num="64" count="14" type="stmt"/>
+        <line num="65" count="14" type="stmt"/>
+        <line num="68" count="10" type="stmt"/>
+        <line num="69" count="10" type="stmt"/>
+        <line num="70" count="10" type="stmt"/>
+        <line num="73" count="2" type="stmt"/>
+        <line num="74" count="2" type="stmt"/>
+        <line num="77" count="3" type="stmt"/>
+        <line num="78" count="3" type="stmt"/>
+        <line num="81" count="1" type="stmt"/>
+        <line num="82" count="1" type="stmt"/>
+        <line num="85" count="1" type="stmt"/>
+        <line num="86" count="1" type="stmt"/>
+        <line num="89" count="2" type="stmt"/>
+        <line num="90" count="2" type="stmt"/>
+        <line num="93" count="1" type="stmt"/>
+        <line num="94" count="1" type="stmt"/>
+        <line num="97" count="1" type="stmt"/>
+        <line num="98" count="1" type="stmt"/>
+        <line num="101" count="1" type="stmt"/>
+        <line num="102" count="1" type="stmt"/>
+        <line num="105" count="1" type="stmt"/>
+        <line num="106" count="1" type="stmt"/>
+        <line num="109" count="2" type="stmt"/>
+        <line num="116" count="2" type="stmt"/>
+        <line num="119" count="2" type="stmt"/>
+        <line num="122" count="1" type="stmt"/>
+        <line num="125" count="1" type="stmt"/>
+        <line num="128" count="1" type="stmt"/>
+        <line num="131" count="1" type="stmt"/>
+        <line num="134" count="2" type="stmt"/>
+        <line num="137" count="2" type="stmt"/>
+        <line num="140" count="2" type="stmt"/>
+      </file>
+      <file name="useApiState.ts" path="/Users/mgild/projects/org-asm/react/useApiState.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="22" count="3" type="stmt"/>
+        <line num="27" count="16" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="16" type="stmt"/>
+        <line num="32" count="54" type="cond" truecount="2" falsecount="0"/>
+        <line num="33" count="45" type="stmt"/>
+        <line num="34" count="45" type="stmt"/>
       </file>
       <file name="useAsyncWasmCall.ts" path="/Users/mgild/projects/org-asm/react/useAsyncWasmCall.ts">
         <metrics statements="18" coveredstatements="18" conditionals="6" coveredconditionals="6" methods="5" coveredmethods="5"/>
@@ -404,6 +538,39 @@
         <line num="39" count="47" type="stmt"/>
         <line num="40" count="47" type="stmt"/>
       </file>
+      <file name="useIntlEngine.ts" path="/Users/mgild/projects/org-asm/react/useIntlEngine.ts">
+        <metrics statements="20" coveredstatements="20" conditionals="2" coveredconditionals="2" methods="13" coveredmethods="13"/>
+        <line num="42" count="18" type="stmt"/>
+        <line num="44" count="18" type="stmt"/>
+        <line num="45" count="18" type="cond" truecount="2" falsecount="0"/>
+        <line num="47" count="16" type="stmt"/>
+        <line num="51" count="9" type="stmt"/>
+        <line num="52" count="9" type="stmt"/>
+        <line num="55" count="4" type="stmt"/>
+        <line num="56" count="4" type="stmt"/>
+        <line num="59" count="7" type="stmt"/>
+        <line num="60" count="7" type="stmt"/>
+        <line num="63" count="1" type="stmt"/>
+        <line num="64" count="1" type="stmt"/>
+        <line num="67" count="2" type="stmt"/>
+        <line num="68" count="2" type="stmt"/>
+        <line num="71" count="1" type="stmt"/>
+        <line num="72" count="1" type="stmt"/>
+        <line num="75" count="2" type="stmt"/>
+        <line num="78" count="1" type="stmt"/>
+        <line num="81" count="3" type="stmt"/>
+        <line num="84" count="2" type="stmt"/>
+      </file>
+      <file name="useIntlState.ts" path="/Users/mgild/projects/org-asm/react/useIntlState.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="24" count="2" type="stmt"/>
+        <line num="29" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="10" type="stmt"/>
+        <line num="34" count="34" type="cond" truecount="2" falsecount="0"/>
+        <line num="35" count="28" type="stmt"/>
+        <line num="36" count="28" type="stmt"/>
+      </file>
       <file name="usePermission.ts" path="/Users/mgild/projects/org-asm/react/usePermission.ts">
         <metrics statements="6" coveredstatements="6" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
         <line num="15" count="2" type="stmt"/>
@@ -421,6 +588,19 @@
         <line num="28" count="7" type="stmt"/>
         <line num="31" count="23" type="cond" truecount="2" falsecount="0"/>
         <line num="32" count="17" type="stmt"/>
+      </file>
+      <file name="useRequest.ts" path="/Users/mgild/projects/org-asm/react/useRequest.ts">
+        <metrics statements="10" coveredstatements="10" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
+        <line num="18" count="2" type="stmt"/>
+        <line num="26" count="2" type="stmt"/>
+        <line num="32" count="18" type="cond" truecount="2" falsecount="0"/>
+        <line num="34" count="18" type="stmt"/>
+        <line num="37" count="61" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="55" type="stmt"/>
+        <line num="39" count="55" type="stmt"/>
+        <line num="40" count="55" type="stmt"/>
+        <line num="41" count="55" type="stmt"/>
+        <line num="42" count="55" type="stmt"/>
       </file>
       <file name="useRole.ts" path="/Users/mgild/projects/org-asm/react/useRole.ts">
         <metrics statements="6" coveredstatements="6" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
@@ -482,6 +662,118 @@
         <line num="112" count="2" type="stmt"/>
         <line num="113" count="2" type="stmt"/>
         <line num="118" count="2" type="stmt"/>
+      </file>
+      <file name="useSearchEngine.ts" path="/Users/mgild/projects/org-asm/react/useSearchEngine.ts">
+        <metrics statements="34" coveredstatements="34" conditionals="2" coveredconditionals="2" methods="21" coveredmethods="21"/>
+        <line num="53" count="26" type="stmt"/>
+        <line num="55" count="26" type="stmt"/>
+        <line num="56" count="26" type="cond" truecount="2" falsecount="0"/>
+        <line num="58" count="24" type="stmt"/>
+        <line num="63" count="7" type="stmt"/>
+        <line num="64" count="7" type="stmt"/>
+        <line num="67" count="1" type="stmt"/>
+        <line num="68" count="1" type="stmt"/>
+        <line num="71" count="4" type="stmt"/>
+        <line num="72" count="4" type="stmt"/>
+        <line num="75" count="1" type="stmt"/>
+        <line num="76" count="1" type="stmt"/>
+        <line num="79" count="5" type="stmt"/>
+        <line num="80" count="5" type="stmt"/>
+        <line num="83" count="1" type="stmt"/>
+        <line num="84" count="1" type="stmt"/>
+        <line num="87" count="1" type="stmt"/>
+        <line num="88" count="1" type="stmt"/>
+        <line num="91" count="3" type="stmt"/>
+        <line num="92" count="3" type="stmt"/>
+        <line num="95" count="1" type="stmt"/>
+        <line num="96" count="1" type="stmt"/>
+        <line num="99" count="2" type="stmt"/>
+        <line num="100" count="2" type="stmt"/>
+        <line num="103" count="1" type="stmt"/>
+        <line num="104" count="1" type="stmt"/>
+        <line num="107" count="1" type="stmt"/>
+        <line num="108" count="1" type="stmt"/>
+        <line num="112" count="2" type="stmt"/>
+        <line num="126" count="2" type="stmt"/>
+        <line num="129" count="2" type="stmt"/>
+        <line num="132" count="1" type="stmt"/>
+        <line num="135" count="1" type="stmt"/>
+        <line num="138" count="1" type="stmt"/>
+      </file>
+      <file name="useSearchResult.ts" path="/Users/mgild/projects/org-asm/react/useSearchResult.ts">
+        <metrics statements="9" coveredstatements="9" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
+        <line num="19" count="2" type="stmt"/>
+        <line num="25" count="3" type="stmt"/>
+        <line num="31" count="15" type="cond" truecount="2" falsecount="0"/>
+        <line num="33" count="15" type="stmt"/>
+        <line num="36" count="48" type="cond" truecount="2" falsecount="0"/>
+        <line num="37" count="39" type="stmt"/>
+        <line num="38" count="39" type="stmt"/>
+        <line num="39" count="39" type="stmt"/>
+        <line num="40" count="39" type="stmt"/>
+      </file>
+      <file name="useSearchState.ts" path="/Users/mgild/projects/org-asm/react/useSearchState.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="29" count="2" type="stmt"/>
+        <line num="34" count="20" type="cond" truecount="2" falsecount="0"/>
+        <line num="36" count="20" type="stmt"/>
+        <line num="39" count="69" type="cond" truecount="2" falsecount="0"/>
+        <line num="40" count="63" type="stmt"/>
+        <line num="41" count="63" type="stmt"/>
+      </file>
+      <file name="useStateMachineEngine.ts" path="/Users/mgild/projects/org-asm/react/useStateMachineEngine.ts">
+        <metrics statements="31" coveredstatements="31" conditionals="2" coveredconditionals="2" methods="20" coveredmethods="20"/>
+        <line num="50" count="26" type="stmt"/>
+        <line num="52" count="26" type="stmt"/>
+        <line num="53" count="26" type="cond" truecount="2" falsecount="0"/>
+        <line num="55" count="24" type="stmt"/>
+        <line num="59" count="22" type="stmt"/>
+        <line num="60" count="22" type="stmt"/>
+        <line num="63" count="8" type="stmt"/>
+        <line num="64" count="8" type="stmt"/>
+        <line num="67" count="11" type="stmt"/>
+        <line num="68" count="11" type="stmt"/>
+        <line num="71" count="3" type="stmt"/>
+        <line num="72" count="3" type="stmt"/>
+        <line num="75" count="6" type="stmt"/>
+        <line num="76" count="6" type="stmt"/>
+        <line num="77" count="6" type="stmt"/>
+        <line num="80" count="2" type="stmt"/>
+        <line num="81" count="2" type="stmt"/>
+        <line num="84" count="3" type="stmt"/>
+        <line num="85" count="3" type="stmt"/>
+        <line num="88" count="1" type="stmt"/>
+        <line num="89" count="1" type="stmt"/>
+        <line num="92" count="1" type="stmt"/>
+        <line num="93" count="1" type="stmt"/>
+        <line num="96" count="1" type="stmt"/>
+        <line num="110" count="2" type="stmt"/>
+        <line num="113" count="2" type="stmt"/>
+        <line num="116" count="1" type="stmt"/>
+        <line num="119" count="1" type="stmt"/>
+        <line num="122" count="2" type="stmt"/>
+        <line num="125" count="1" type="stmt"/>
+        <line num="128" count="2" type="stmt"/>
+      </file>
+      <file name="useStateMachineState.ts" path="/Users/mgild/projects/org-asm/react/useStateMachineState.ts">
+        <metrics statements="7" coveredstatements="7" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="29" count="3" type="stmt"/>
+        <line num="34" count="13" type="cond" truecount="2" falsecount="0"/>
+        <line num="36" count="13" type="stmt"/>
+        <line num="39" count="43" type="cond" truecount="2" falsecount="0"/>
+        <line num="40" count="34" type="stmt"/>
+        <line num="41" count="34" type="stmt"/>
+      </file>
+      <file name="useStateMatch.ts" path="/Users/mgild/projects/org-asm/react/useStateMatch.ts">
+        <metrics statements="6" coveredstatements="6" conditionals="6" coveredconditionals="6" methods="4" coveredmethods="4"/>
+        <line num="15" count="2" type="stmt"/>
+        <line num="21" count="2" type="stmt"/>
+        <line num="27" count="11" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="11" type="stmt"/>
+        <line num="32" count="36" type="cond" truecount="2" falsecount="0"/>
+        <line num="33" count="30" type="stmt"/>
       </file>
       <file name="useTableCell.ts" path="/Users/mgild/projects/org-asm/react/useTableCell.ts">
         <metrics statements="7" coveredstatements="7" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
@@ -564,6 +856,18 @@
         <line num="46" count="49" type="stmt"/>
         <line num="47" count="49" type="stmt"/>
       </file>
+      <file name="useTranslation.ts" path="/Users/mgild/projects/org-asm/react/useTranslation.ts">
+        <metrics statements="9" coveredstatements="9" conditionals="6" coveredconditionals="6" methods="4" coveredmethods="4"/>
+        <line num="17" count="2" type="stmt"/>
+        <line num="23" count="3" type="stmt"/>
+        <line num="29" count="12" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="12" type="stmt"/>
+        <line num="34" count="38" type="cond" truecount="2" falsecount="0"/>
+        <line num="35" count="29" type="stmt"/>
+        <line num="36" count="29" type="stmt"/>
+        <line num="37" count="29" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="38" type="stmt"/>
+      </file>
       <file name="useUndoEntry.ts" path="/Users/mgild/projects/org-asm/react/useUndoEntry.ts">
         <metrics statements="6" coveredstatements="6" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
         <line num="15" count="2" type="stmt"/>
@@ -599,42 +903,42 @@
       </file>
       <file name="useWasmSelector.ts" path="/Users/mgild/projects/org-asm/react/useWasmSelector.ts">
         <metrics statements="22" coveredstatements="22" conditionals="21" coveredconditionals="21" methods="3" coveredmethods="3"/>
-        <line num="30" count="487" type="cond" truecount="2" falsecount="0"/>
-        <line num="31" count="397" type="cond" truecount="4" falsecount="0"/>
-        <line num="32" count="396" type="cond" truecount="4" falsecount="0"/>
-        <line num="34" count="395" type="stmt"/>
-        <line num="35" count="395" type="stmt"/>
-        <line num="36" count="395" type="cond" truecount="2" falsecount="0"/>
-        <line num="38" count="394" type="stmt"/>
-        <line num="39" count="2174" type="cond" truecount="2" falsecount="0"/>
-        <line num="40" count="2173" type="cond" truecount="2" falsecount="0"/>
-        <line num="42" count="335" type="stmt"/>
-        <line num="50" count="182" type="stmt"/>
-        <line num="51" count="182" type="stmt"/>
-        <line num="52" count="182" type="stmt"/>
-        <line num="53" count="182" type="stmt"/>
-        <line num="54" count="182" type="stmt"/>
-        <line num="56" count="182" type="stmt"/>
-        <line num="57" count="613" type="stmt"/>
-        <line num="58" count="613" type="cond" truecount="4" falsecount="0"/>
-        <line num="59" count="431" type="stmt"/>
-        <line num="61" count="182" type="stmt"/>
-        <line num="62" count="182" type="stmt"/>
-        <line num="65" count="182" type="stmt"/>
+        <line num="30" count="795" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="665" type="cond" truecount="4" falsecount="0"/>
+        <line num="32" count="664" type="cond" truecount="4" falsecount="0"/>
+        <line num="34" count="663" type="stmt"/>
+        <line num="35" count="663" type="stmt"/>
+        <line num="36" count="663" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="662" type="stmt"/>
+        <line num="39" count="3558" type="cond" truecount="2" falsecount="0"/>
+        <line num="40" count="3557" type="cond" truecount="2" falsecount="0"/>
+        <line num="42" count="564" type="stmt"/>
+        <line num="50" count="297" type="stmt"/>
+        <line num="51" count="297" type="stmt"/>
+        <line num="52" count="297" type="stmt"/>
+        <line num="53" count="297" type="stmt"/>
+        <line num="54" count="297" type="stmt"/>
+        <line num="56" count="297" type="stmt"/>
+        <line num="57" count="996" type="stmt"/>
+        <line num="58" count="996" type="cond" truecount="4" falsecount="0"/>
+        <line num="59" count="700" type="stmt"/>
+        <line num="61" count="296" type="stmt"/>
+        <line num="62" count="296" type="stmt"/>
+        <line num="65" count="297" type="stmt"/>
       </file>
       <file name="useWasmState.ts" path="/Users/mgild/projects/org-asm/react/useWasmState.ts">
         <metrics statements="20" coveredstatements="20" conditionals="4" coveredconditionals="4" methods="7" coveredmethods="7"/>
-        <line num="41" count="188" type="stmt"/>
-        <line num="42" count="188" type="stmt"/>
-        <line num="43" count="188" type="stmt"/>
-        <line num="46" count="168" type="stmt"/>
-        <line num="49" count="188" type="stmt"/>
-        <line num="51" count="150" type="stmt"/>
-        <line num="52" count="150" type="stmt"/>
-        <line num="55" count="172" type="cond" truecount="2" falsecount="0"/>
+        <line num="41" count="324" type="stmt"/>
+        <line num="42" count="324" type="stmt"/>
+        <line num="43" count="324" type="stmt"/>
+        <line num="46" count="380" type="stmt"/>
+        <line num="49" count="324" type="stmt"/>
+        <line num="51" count="243" type="stmt"/>
+        <line num="52" count="243" type="stmt"/>
+        <line num="55" count="384" type="cond" truecount="2" falsecount="0"/>
         <line num="56" count="8" type="stmt"/>
         <line num="57" count="8" type="stmt"/>
-        <line num="59" count="164" type="stmt"/>
+        <line num="59" count="376" type="stmt"/>
         <line num="62" count="6" type="stmt"/>
         <line num="63" count="6" type="stmt"/>
         <line num="64" count="6" type="stmt"/>

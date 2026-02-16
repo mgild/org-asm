@@ -58,6 +58,22 @@ import { /* store factories */ } from 'org-asm/model';
 | Per-entry undo subscription | `useUndoEntry` | `(handle, index)` | `CommandEntry` |
 | Per-entry redo subscription | `useRedoEntry` | `(handle, index)` | `CommandEntry` |
 | Share history across component tree | `createHistoryContext` | `<E>()` | `{ HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem }` |
+| Rust-owned intl state | `useIntlEngine` | `(engine)` | `IntlHandle \| null` |
+| Intl-level state (locale, missing) | `useIntlState` | `(handle)` | `IntlState` |
+| Per-key translation | `useTranslation` | `(handle, key)` | `TranslationState` |
+| Share intl across component tree | `createIntlContext` | `<E>()` | `{ IntlProvider, useIntl, useIntlStatus, useTranslation }` |
+| Rust-owned search state | `useSearchEngine` | `(engine)` | `SearchHandle \| null` |
+| Search-level state (query, results) | `useSearchState` | `(handle)` | `SearchState` |
+| Per-result subscription | `useSearchResult` | `(handle, index)` | `SearchResult` |
+| Share search across component tree | `createSearchContext` | `<E>()` | `{ SearchProvider, useSearch, useSearchStatus, useSearchResult }` |
+| Rust-owned state machine | `useStateMachineEngine` | `(engine)` | `StateMachineHandle \| null` |
+| SM-level state (current, guards) | `useStateMachineState` | `(handle)` | `StateMachineState` |
+| Per-state match subscription | `useStateMatch` | `(handle, stateId)` | `StateMatch` |
+| Share SM across component tree | `createStateMachineContext` | `<E>()` | `{ StateMachineProvider, useStateMachine, useStateMachineStatus, useStateMatch }` |
+| Rust-owned API state | `useApiEngine` | `(engine)` | `ApiHandle \| null` |
+| API-level state (endpoints, requests) | `useApiState` | `(handle)` | `ApiState` |
+| Per-request subscription | `useRequest` | `(handle, requestId)` | `RequestState` |
+| Share API across component tree | `createApiContext` | `<E>()` | `{ ApiProvider, useApi, useApiStatus, useRequest }` |
 | Catch WASM panics | `WasmErrorBoundary` | component | Renders fallback on error |
 | WebSocket/SSE connection | `useConnection` | `(config)` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM (frame-oriented) | `useWorker` | `(config)` | `{ loop, bridge, ready, error }` |
@@ -259,6 +275,94 @@ const { HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem 
 // Stack: const { label } = useUndoItem(0);
 ```
 
+### Rust-owned intl with per-key translation
+```ts
+const engine = useMemo(() => new MyIntlEngine(), []);
+const handle = useIntlEngine(engine);
+const { locale, missingKeyCount } = useIntlState(handle);
+const { value, missing } = useTranslation(handle, 'greeting.hello');
+
+// Switch locale
+handle?.setLocale('es');
+handle?.loadMessages(JSON.stringify(esMessages));
+```
+
+### Intl context (no prop drilling)
+```ts
+const { IntlProvider, useIntl, useIntlStatus, useTranslation } = createIntlContext<MyIntlEngine>();
+// Wrap: <IntlProvider engine={engine}>...</IntlProvider>
+// Read: const { setLocale } = useIntl(); const { locale } = useIntlStatus();
+// Translate: const { value, missing } = useTranslation('greeting.hello');
+```
+
+### Rust-owned search with faceted filters
+```ts
+const engine = useMemo(() => new MySearchEngine(), []);
+const handle = useSearchEngine(engine);
+const { query, resultCount, page, pageCount } = useSearchState(handle);
+const { id, exists } = useSearchResult(handle, 0);
+
+handle?.setQuery('laptop');
+handle?.addFilter(JSON.stringify({ field: 'category', op: 'eq', value: 'electronics' }));
+handle?.setSort('price', 'asc');
+handle?.setPage(2);
+```
+
+### Search context (no prop drilling)
+```ts
+const { SearchProvider, useSearch, useSearchStatus, useSearchResult } = createSearchContext<MySearchEngine>();
+// Wrap: <SearchProvider engine={engine}>...</SearchProvider>
+// Read: const { setQuery, addFilter } = useSearch(); const { resultCount } = useSearchStatus();
+// Result: const { id, exists } = useSearchResult(0);
+```
+
+### Rust-owned state machine with guards
+```ts
+const engine = useMemo(() => new MyStateMachineEngine(), []);
+const handle = useStateMachineEngine(engine);
+const { currentState, pendingGuard } = useStateMachineState(handle);
+const { isActive } = useStateMatch(handle, 'review');
+
+handle?.sendEvent('SUBMIT');
+
+// Two-phase guard protocol
+useEffect(() => {
+  if (!pendingGuard) return;
+  checkAuth(pendingGuard).then(ok => handle?.resolveGuard(ok));
+}, [pendingGuard]);
+```
+
+### State machine context (no prop drilling)
+```ts
+const { StateMachineProvider, useStateMachine, useStateMachineStatus, useStateMatch } = createStateMachineContext<MyStateMachineEngine>();
+// Wrap: <StateMachineProvider engine={engine}>...</StateMachineProvider>
+// Read: const { sendEvent } = useStateMachine(); const { currentState } = useStateMachineStatus();
+// Match: const { isActive } = useStateMatch('review');
+```
+
+### Rust-owned API with request tracking and caching
+```ts
+const engine = useMemo(() => new MyApiEngine(), []);
+const handle = useApiEngine(engine);
+const { endpointCount, activeRequestCount } = useApiState(handle);
+const { status, error, hasResponse } = useRequest(handle, 'req_1');
+
+// Build URL from registered endpoint
+const url = handle?.buildUrl('list_users', JSON.stringify({ page: '1' }));
+handle?.beginRequest('req_1', 'list_users');
+handle?.setRequestLoading('req_1');
+// ... fetch ... then:
+handle?.setRequestSuccess('req_1', JSON.stringify(data));
+```
+
+### API context (no prop drilling)
+```ts
+const { ApiProvider, useApi, useApiStatus, useRequest } = createApiContext<MyApiEngine>();
+// Wrap: <ApiProvider engine={engine}>...</ApiProvider>
+// Read: const { beginRequest, buildUrl } = useApi(); const { activeRequestCount } = useApiStatus();
+// Request: const { status, error } = useRequest('req_1');
+```
+
 ### Search with debounce
 ```ts
 const results = useDebouncedWasmCall(
@@ -332,6 +436,22 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `useUndoEntry` | Per-entry undo subscription (index, label) |
 | `useRedoEntry` | Per-entry redo subscription (index, label) |
 | `createHistoryContext` | Shared history context factory (Provider + hooks) |
+| `useIntlEngine` | Create IntlHandle wrapping Rust IIntlEngine |
+| `useIntlState` | Intl-level subscription (locale, missingKeyCount) |
+| `useTranslation` | Per-key translation subscription (key, value, missing) |
+| `createIntlContext` | Shared intl context factory (Provider + hooks) |
+| `useSearchEngine` | Create SearchHandle wrapping Rust ISearchEngine |
+| `useSearchState` | Search-level subscription (query, resultCount, page, sort) |
+| `useSearchResult` | Per-result subscription (id, exists) |
+| `createSearchContext` | Shared search context factory (Provider + hooks) |
+| `useStateMachineEngine` | Create StateMachineHandle wrapping Rust IStateMachineEngine |
+| `useStateMachineState` | SM-level subscription (currentState, pendingGuard, transitionCount) |
+| `useStateMatch` | Per-state match subscription (stateId, isActive, label) |
+| `createStateMachineContext` | Shared state machine context factory (Provider + hooks) |
+| `useApiEngine` | Create ApiHandle wrapping Rust IApiEngine |
+| `useApiState` | API-level subscription (endpointCount, activeRequestCount) |
+| `useRequest` | Per-request subscription (requestId, status, error, hasResponse) |
+| `createApiContext` | Shared API context factory (Provider + hooks) |
 | `WasmErrorBoundary` | Error boundary for WASM panics with reset |
 | `useConnection` | WebSocket/SSE with state tracking |
 | `useWorker` | Off-main-thread WASM via SharedArrayBuffer |
@@ -386,6 +506,22 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `IHistoryEngine` | History engine contract (push_command, undo, redo, checkpoint, has_unsaved_changes) |
 | `HistoryState` | History-level snapshot (canUndo, canRedo, hasUnsavedChanges, isAtCheckpoint) |
 | `CommandEntry` | Undo/redo entry snapshot (index, label) |
+| `IIntlEngine` | Intl engine contract (set_locale, load_messages, translate, translate_plural) |
+| `IntlState` | Intl-level snapshot (locale, fallbackLocale, messageCount, missingKeyCount) |
+| `TranslationState` | Per-key translation snapshot (key, value, missing) |
+| `ISearchEngine` | Search engine contract (load_items, set_query, add_filter, set_sort, set_page) |
+| `FilterOp` | Filter operation enum (eq, neq, gt, gte, lt, lte, contains) |
+| `SearchState` | Search-level snapshot (query, resultCount, page, pageSize, sortField, filterCount) |
+| `SearchResult` | Per-result snapshot (id, exists) |
+| `IStateMachineEngine` | State machine engine contract (add_state, add_transition, send_event, resolve_guard) |
+| `StateMachineState` | SM-level snapshot (currentState, pendingGuard, transitionCount, availableEventCount) |
+| `StateMatch` | Per-state match snapshot (stateId, isActive, label) |
+| `IApiEngine` | API engine contract (register_endpoint, begin_request, set_request_success, build_url) |
+| `RequestStatus` | Request status type ('idle' \| 'loading' \| 'success' \| 'error') |
+| `ApiFormat` | Response format type ('json' \| 'flatbuffer') |
+| `ParamSource` | Parameter source type ('path' \| 'query' \| 'body' \| 'header') |
+| `ApiState` | API-level snapshot (endpointCount, activeRequestCount) |
+| `RequestState` | Per-request snapshot (requestId, status, error, hasResponse) |
 | `WasmNotifier` | Pub/sub interface for useWasmState |
 | `IEngine<F>` | Model contract (tick, addDataPoint, openAction) |
 | `IAnimationLoop<F>` | Loop contract (start, stop, addConsumer) |
@@ -403,6 +539,10 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 5d. `guides/auth-engine.md` — Auth engine: IAuthEngine, token management, RBAC, per-permission reactivity
 5e. `guides/router-engine.md` — Router engine: IRouterEngine, navigation, guards, breadcrumbs
 5f. `guides/history-engine.md` — History engine: IHistoryEngine, undo/redo, checkpoints, batches
+5g. `guides/intl-engine.md` — Intl engine: IIntlEngine, locale management, translation, pluralization
+5h. `guides/search-engine.md` — Search engine: ISearchEngine, filters, facets, pagination, lazy recomputation
+5i. `guides/statemachine-engine.md` — State machine engine: IStateMachineEngine, transitions, guards, parallel states
+5j. `guides/api-engine.md` — API engine: IApiEngine, endpoint normalization, request tracking, caching
 6. `guides/frame-buffer-design.md` — FlatBuffer frame protocol, zero-copy reads
 7. `guides/server-engine-pattern.md` — Server-side Rust engine, FlatBuffer broadcast
 

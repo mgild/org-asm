@@ -273,3 +273,129 @@ export interface CommandEntry {
   readonly label: string;
 }
 
+// ============================================
+// Intl (i18n) engine types
+// ============================================
+
+/** Top-level intl state snapshot. Read by useIntlState. */
+export interface IntlState {
+  readonly locale: string;
+  readonly fallbackLocale: string;
+  readonly availableLocaleCount: number;
+  readonly missingKeyCount: number;
+  readonly dataVersion: number;
+}
+
+/** Per-key translation state snapshot. Read by useTranslation. */
+export interface TranslationState {
+  readonly key: string;
+  readonly value: string;
+  readonly missing: boolean;
+}
+
+// ============================================
+// Search/Filter engine types
+// ============================================
+
+/** Filter comparison operator. */
+export enum FilterOp {
+  Eq = 0,
+  NotEq = 1,
+  Gt = 2,
+  Lt = 3,
+  Gte = 4,
+  Lte = 5,
+  Contains = 6,
+  StartsWith = 7,
+  In = 8,
+}
+
+/** Top-level search state snapshot. Read by useSearchState. */
+export interface SearchState {
+  readonly query: string;
+  readonly resultCount: number;
+  readonly itemCount: number;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly pageCount: number;
+  readonly sortField: string;
+  readonly sortDirection: number;
+  readonly filterCount: number;
+  readonly dataVersion: number;
+}
+
+/** Per-result state snapshot. Read by useSearchResult. */
+export interface SearchResult {
+  readonly index: number;
+  readonly id: string;
+  readonly exists: boolean;
+}
+
+// ============================================
+// State machine engine types
+// ============================================
+
+/** Top-level state machine state snapshot. Read by useStateMachineState. */
+export interface StateMachineState {
+  readonly currentState: string;
+  readonly currentStateLabel: string;
+  readonly previousState: string;
+  readonly pendingGuard: string;
+  readonly guardId: string;
+  readonly transitionCount: number;
+  readonly availableEventCount: number;
+  readonly activeStateCount: number;
+  readonly contextJson: string;
+  readonly dataVersion: number;
+}
+
+/** Per-state match snapshot. Read by useStateMatch. */
+export interface StateMatch {
+  readonly stateId: string;
+  readonly isActive: boolean;
+  readonly label: string;
+}
+
+// ============================================
+// API engine types
+// ============================================
+
+/** Request lifecycle status. */
+export enum RequestStatus {
+  Idle = 0,
+  Loading = 1,
+  Success = 2,
+  Error = 3,
+  Cancelled = 4,
+}
+
+/** API response format. */
+export enum ApiFormat {
+  Json = 0,
+  FlatBuffer = 1,
+}
+
+/** API parameter source. */
+export enum ParamSource {
+  Query = 0,
+  Body = 1,
+  Path = 2,
+  Header = 3,
+}
+
+/** Top-level API state snapshot. Read by useApiState. */
+export interface ApiState {
+  readonly endpointCount: number;
+  readonly activeRequestCount: number;
+  readonly dataVersion: number;
+}
+
+/** Per-request state snapshot. Read by useRequest. */
+export interface RequestState {
+  readonly requestId: number;
+  readonly endpointId: string;
+  readonly status: RequestStatus;
+  readonly error: string;
+  readonly hasResponse: boolean;
+}
+

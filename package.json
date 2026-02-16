@@ -56,6 +56,10 @@
     "model/auth-engine-template.rs",
     "model/router-engine-template.rs",
     "model/history-engine-template.rs",
+    "model/intl-engine-template.rs",
+    "model/search-engine-template.rs",
+    "model/statemachine-engine-template.rs",
+    "model/api-engine-template.rs",
     "model/Cargo.template.toml",
     "shared/lib-template.rs",
     "shared/validation-template.rs",
@@ -98,7 +102,11 @@
     "data-table",
     "auth",
     "router",
-    "undo-redo"
+    "undo-redo",
+    "i18n",
+    "search",
+    "state-machine",
+    "api"
   ],
   "license": "MIT",
   "dependencies": {

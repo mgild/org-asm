@@ -124,6 +124,22 @@ Real-time paths use the frame buffer and direct DOM writes — React never sees 
 | Per-entry undo subscription | `useUndoEntry` | `CommandEntry` |
 | Per-entry redo subscription | `useRedoEntry` | `CommandEntry` |
 | Share history across tree | `createHistoryContext` | `{ HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem }` |
+| Rust-owned intl state | `useIntlEngine` | `IntlHandle \| null` |
+| Intl-level state | `useIntlState` | `IntlState` |
+| Per-key translation | `useTranslation` | `TranslationState` |
+| Share intl across tree | `createIntlContext` | `{ IntlProvider, useIntl, useIntlStatus, useTranslation }` |
+| Rust-owned search state | `useSearchEngine` | `SearchHandle \| null` |
+| Search-level state | `useSearchState` | `SearchState` |
+| Per-result reactivity | `useSearchResult` | `SearchResult` |
+| Share search across tree | `createSearchContext` | `{ SearchProvider, useSearch, useSearchStatus, useSearchResult }` |
+| Rust-owned state machine | `useStateMachineEngine` | `StateMachineHandle \| null` |
+| SM-level state | `useStateMachineState` | `StateMachineState` |
+| Per-state match reactivity | `useStateMatch` | `StateMatch` |
+| Share SM across tree | `createStateMachineContext` | `{ StateMachineProvider, useStateMachine, useStateMachineStatus, useStateMatch }` |
+| Rust-owned API state | `useApiEngine` | `ApiHandle \| null` |
+| API-level state | `useApiState` | `ApiState` |
+| Per-request reactivity | `useRequest` | `RequestState` |
+| Share API across tree | `createApiContext` | `{ ApiProvider, useApi, useApiStatus, useRequest }` |
 | Catch WASM panics | `WasmErrorBoundary` | React component |
 | Manage WebSocket/SSE | `useConnection` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM | `useWorker` | `{ loop, bridge, ready, error }` |
@@ -568,6 +584,42 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useRedoEntry(handle, index)` | `CommandEntry` | Per-entry redo subscription -- only re-renders when this entry's label changes |
 | `createHistoryContext<E>()` | `{ HistoryProvider, useHistory, useHistoryStatus, useUndoItem, useRedoItem }` | Context factory for sharing history across component tree without prop drilling |
 
+#### Intl Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useIntlEngine(engine)` | `IntlHandle \| null` | Create dispatch handle wrapping a Rust IIntlEngine -- setLocale, loadMessages, translate, reset |
+| `useIntlState(handle)` | `IntlState` | Intl-level subscription -- locale, fallbackLocale, messageCount, missingKeyCount, dataVersion |
+| `useTranslation(handle, key)` | `TranslationState` | Per-key translation subscription -- only re-renders when this key's translation changes |
+| `createIntlContext<E>()` | `{ IntlProvider, useIntl, useIntlStatus, useTranslation }` | Context factory for sharing intl across component tree without prop drilling |
+
+#### Search Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useSearchEngine(engine)` | `SearchHandle \| null` | Create dispatch handle wrapping a Rust ISearchEngine -- setQuery, addFilter, setSort, setPage, loadItems, reset |
+| `useSearchState(handle)` | `SearchState` | Search-level subscription -- query, resultCount, page, pageSize, pageCount, sortField, filterCount, dataVersion |
+| `useSearchResult(handle, index)` | `SearchResult` | Per-result subscription -- only re-renders when this result's id changes |
+| `createSearchContext<E>()` | `{ SearchProvider, useSearch, useSearchStatus, useSearchResult }` | Context factory for sharing search across component tree without prop drilling |
+
+#### State Machine Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useStateMachineEngine(engine)` | `StateMachineHandle \| null` | Create dispatch handle wrapping a Rust IStateMachineEngine -- sendEvent, resolveGuard, setContext, reset |
+| `useStateMachineState(handle)` | `StateMachineState` | SM-level subscription -- currentState, pendingGuard, transitionCount, availableEventCount, dataVersion |
+| `useStateMatch(handle, stateId)` | `StateMatch` | Per-state match subscription -- only re-renders when this state's active status changes |
+| `createStateMachineContext<E>()` | `{ StateMachineProvider, useStateMachine, useStateMachineStatus, useStateMatch }` | Context factory for sharing state machine across component tree without prop drilling |
+
+#### API Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useApiEngine(engine)` | `ApiHandle \| null` | Create dispatch handle wrapping a Rust IApiEngine -- registerEndpoint, beginRequest, setRequestSuccess, buildUrl, reset |
+| `useApiState(handle)` | `ApiState` | API-level subscription -- endpointCount, activeRequestCount, dataVersion |
+| `useRequest(handle, requestId)` | `RequestState` | Per-request subscription -- only re-renders when this request's status changes |
+| `createApiContext<E>()` | `{ ApiProvider, useApi, useApiStatus, useRequest }` | Context factory for sharing API across component tree without prop drilling |
+
 #### Connection & Infrastructure
 
 | Hook | Returns | Description |
@@ -606,6 +658,10 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 | `IAuthEngine` | Auth engine contract: `set_tokens()`, `set_authenticated()`, `logout()`, `has_permission()`, `has_role()`, `set_permissions()`, `set_roles()` |
 | `IRouterEngine` | Router engine contract: `navigate()`, `replace()`, `back()`, `forward()`, `is_match()`, `resolve_guard()`, `param()`, `query_param()` |
 | `IHistoryEngine` | History engine contract: `push_command()`, `push_batch()`, `undo()`, `redo()`, `checkpoint()`, `has_unsaved_changes()`, `set_max_history()` |
+| `IIntlEngine` | Intl engine contract: `set_locale()`, `load_messages()`, `translate()`, `translate_plural()`, `set_fallback_locale()` |
+| `ISearchEngine` | Search engine contract: `load_items()`, `set_query()`, `add_filter()`, `set_sort()`, `set_page()`, `get_result_value()`, `get_facet_count()` |
+| `IStateMachineEngine` | State machine engine contract: `add_state()`, `add_transition()`, `send_event()`, `resolve_guard()`, `set_context()`, `is_in_state()` |
+| `IApiEngine` | API engine contract: `register_endpoint()`, `begin_request()`, `set_request_success()`, `build_url()`, `is_cached()`, `invalidate_cache()` |
 | `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()`, `batch()` |
 
 ### View

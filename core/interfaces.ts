@@ -720,3 +720,356 @@ export interface ITableEngine {
   /** Reset all state to defaults. */
   reset(): void;
 }
+
+// ============================================
+// Intl (i18n) engine interfaces
+// ============================================
+
+/**
+ * IIntlEngine — Rust-owned internationalization state contract.
+ *
+ * ALL locale/translation state lives in the WASM engine: current locale,
+ * fallback locale, message catalogs, missing key tracking, pluralization.
+ * TypeScript is a dumb text renderer that dispatches locale changes and
+ * reads translated strings back via getSnapshot functions.
+ *
+ * Fallback chain: current locale → fallback locale → return key as-is.
+ * Pluralization: count==0 → key.zero (→ key.other), count==1 → key.one, else → key.other.
+ *
+ * Implementors: Rust structs compiled to WASM with HashMap-based catalogs
+ * and per-key missing tracking.
+ */
+export interface IIntlEngine {
+  // --- Locale ---
+  /** Set the active locale. */
+  set_locale(locale: string): void;
+  /** Get the current active locale. */
+  current_locale(): string;
+  /** Number of available locales. */
+  available_locales_count(): number;
+  /** Get an available locale by index. */
+  available_locale(index: number): string;
+  /** Add a locale to the available set. */
+  add_locale(locale: string): void;
+
+  // --- Catalog ---
+  /** Load messages for a locale from flat JSON {"key":"value"}. */
+  load_messages(locale: string, json: string): void;
+  /** Clear all messages for a locale. */
+  clear_messages(locale: string): void;
+
+  // --- Translation ---
+  /** Translate a key. Returns the key itself if missing. */
+  translate(key: string): string;
+  /** Translate with parameter interpolation. params_json is {"param":"value"}. */
+  translate_with_params(key: string, params_json: string): string;
+  /** Translate with pluralization. Resolves key.zero/key.one/key.other based on count. */
+  translate_plural(key: string, count: number): string;
+
+  // --- Missing keys ---
+  /** Number of missing keys encountered. */
+  missing_key_count(): number;
+  /** Get a missing key by index. */
+  missing_key(index: number): string;
+
+  // --- Fallback ---
+  /** Set the fallback locale. */
+  set_fallback_locale(locale: string): void;
+  /** Get the fallback locale. */
+  fallback_locale(): string;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all intl state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// Search/Filter engine interfaces
+// ============================================
+
+/**
+ * ISearchEngine — Rust-owned search/filter state contract.
+ *
+ * ALL search state lives in the WASM engine: items, query, filters, sort,
+ * pagination, facets. TypeScript is a dumb result renderer that dispatches
+ * search actions and reads results back.
+ *
+ * Lazy recomputation: mutations set a dirty flag, reads trigger recompute()
+ * if dirty. This avoids redundant computation when multiple mutations happen
+ * before a read.
+ *
+ * Implementors: Rust structs compiled to WASM with Vec-based item storage,
+ * filter evaluation, and on-the-fly facet computation.
+ */
+export interface ISearchEngine {
+  // --- Data ---
+  /** Load items from a JSON array of objects. */
+  load_items(json: string): void;
+  /** Clear all items. */
+  clear_items(): void;
+  /** Total number of loaded items. */
+  item_count(): number;
+  /** Number of items matching current query/filters. */
+  result_count(): number;
+
+  // --- Search ---
+  /** Set the search query text. */
+  set_query(text: string): void;
+  /** Get the current search query. */
+  current_query(): string;
+  /** Set which fields to search. JSON array of field names. */
+  set_search_fields(json: string): void;
+
+  // --- Filters ---
+  /** Add a filter. Op: 0=Eq,1=NotEq,2=Gt,3=Lt,4=Gte,5=Lte,6=Contains,7=StartsWith,8=In. */
+  add_filter(field: string, op: number, value: string): void;
+  /** Remove a filter by index. */
+  remove_filter(index: number): void;
+  /** Clear all filters. */
+  clear_filters(): void;
+  /** Number of active filters. */
+  filter_count(): number;
+  /** Get the field name of a filter by index. */
+  filter_field(index: number): string;
+  /** Get the operator of a filter by index. */
+  filter_op(index: number): number;
+  /** Get the value of a filter by index. */
+  filter_value(index: number): string;
+
+  // --- Sort ---
+  /** Set sort field and direction (0=none, 1=asc, 2=desc). */
+  set_sort(field: string, direction: number): void;
+  /** Clear sort. */
+  clear_sort(): void;
+  /** Current sort field. */
+  sort_field(): string;
+  /** Current sort direction. */
+  sort_direction(): number;
+
+  // --- Results (paginated) ---
+  /** Get the ID of a result at index (within current page). */
+  result_id(index: number): string;
+  /** Get a field value of a result at index (within current page). */
+  result_value(index: number, field: string): string;
+
+  // --- Pagination ---
+  /** Set the current page (0-based). */
+  set_page(page: number): void;
+  /** Set the page size. */
+  set_page_size(size: number): void;
+  /** Current page index. */
+  page(): number;
+  /** Current page size. */
+  page_size(): number;
+  /** Total number of pages. */
+  page_count(): number;
+
+  // --- Facets ---
+  /** Number of distinct values for a field across results. */
+  facet_count(field: string): number;
+  /** Get a facet value by field and index. */
+  facet_value(field: string, index: number): string;
+  /** Number of items matching a specific facet value. */
+  facet_item_count(field: string, value: string): number;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all search state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// State machine engine interfaces
+// ============================================
+
+/**
+ * IStateMachineEngine — Rust-owned generic state machine contract.
+ *
+ * ALL FSM state lives in the WASM engine: states, transitions, guards,
+ * active states, history, context. TypeScript is a dumb state renderer
+ * that dispatches events and reads state back.
+ *
+ * Two-phase guard protocol (same as router): send_event() stashes pending
+ * if guarded, resolve_guard() completes or cancels.
+ *
+ * Supports parallel state charts via multiple active states.
+ *
+ * Implementors: Rust structs compiled to WASM with HashMap-based states,
+ * Vec-based transitions, and two-phase guard resolution.
+ */
+export interface IStateMachineEngine {
+  // --- Config ---
+  /** Add a state. json is {label, meta}. */
+  add_state(id: string, json: string): void;
+  /** Add a transition from one state to another on an event. */
+  add_transition(from_state: string, event: string, to_state: string): void;
+  /** Set the initial state. */
+  set_initial_state(id: string): void;
+  /** Set a guard on a transition (from_state + event). */
+  set_guard(from_state: string, event: string, guard_id: string): void;
+
+  // --- State ---
+  /** Get the current state ID. */
+  current_state(): string;
+  /** Get the current state label. */
+  current_state_label(): string;
+  /** Get the current state meta JSON. */
+  current_state_meta(): string;
+
+  // --- Transitions ---
+  /** Send an event. Returns true if transition occurred (or guard pending). */
+  send_event(event: string): boolean;
+  /** Whether an event can be sent from the current state. */
+  can_send(event: string): boolean;
+  /** Number of available events from the current state. */
+  available_event_count(): number;
+  /** Get an available event by index. */
+  available_event(index: number): string;
+
+  // --- Guards ---
+  /** Get the pending guard ID (empty if none). */
+  pending_guard(): string;
+  /** Resolve a pending guard (true = allow, false = deny). */
+  resolve_guard(allowed: boolean): void;
+  /** Get the guard ID for the pending transition. */
+  guard_id(): string;
+
+  // --- History ---
+  /** Get the previous state ID. */
+  previous_state(): string;
+  /** Total number of transitions that have occurred. */
+  transition_count(): number;
+  /** Number of states in the history. */
+  state_history_count(): number;
+  /** Get a state from history by index. */
+  state_history(index: number): string;
+
+  // --- Context ---
+  /** Set context from JSON. */
+  set_context(json: string): void;
+  /** Get context as JSON. */
+  context_json(): string;
+  /** Merge JSON into existing context. */
+  merge_context(json: string): void;
+
+  // --- Parallel ---
+  /** Number of active states (1 for flat FSM, >1 for parallel). */
+  active_state_count(): number;
+  /** Get an active state by index. */
+  active_state(index: number): string;
+  /** Whether a specific state is currently active. */
+  is_in_state(id: string): boolean;
+
+  // --- Actions ---
+  /** Get the on-enter action descriptor JSON for a state. */
+  on_enter_action(state_id: string): string;
+  /** Get the on-exit action descriptor JSON for a state. */
+  on_exit_action(state_id: string): string;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all state machine state to defaults. */
+  reset(): void;
+}
+
+// ============================================
+// API engine interfaces
+// ============================================
+
+/**
+ * IApiEngine — Rust-owned API request state contract.
+ *
+ * ALL API state lives in the WASM engine: endpoints, requests, responses,
+ * cache, format config. TypeScript is a dumb request executor that
+ * dispatches API actions and reads request state back.
+ *
+ * One-platform style: caller passes ONE params object, engine splits by
+ * source (query/body/path/header) based on endpoint param definitions.
+ * build_url() does path param substitution + query param append.
+ * build_body() extracts body-sourced params as JSON.
+ *
+ * Supports JSON and FlatBuffer response formats with zero-copy ptr/len
+ * accessors for FlatBuffer responses.
+ *
+ * Implementors: Rust structs compiled to WASM with Vec-based endpoint
+ * storage, request tracking, and HashMap-based response cache.
+ */
+export interface IApiEngine {
+  // --- Endpoints ---
+  /** Register an endpoint. params_json defines [{name, source, required}]. */
+  register_endpoint(id: string, method: string, path: string, params_json: string): void;
+
+  // --- Requests ---
+  /** Begin a request. Returns a request ID. */
+  begin_request(endpoint_id: string, params_json: string): number;
+  /** Mark a request as loading. */
+  set_request_loading(request_id: number): void;
+  /** Mark a request as successful with response data. */
+  set_request_success(request_id: number, response_json: string): void;
+  /** Mark a request as failed with an error message. */
+  set_request_error(request_id: number, error: string): void;
+  /** Cancel a request. */
+  cancel_request(request_id: number): void;
+
+  // --- Responses ---
+  /** Get the response JSON for a request. */
+  response_json(request_id: number): string;
+  /** Get the response status for a request. */
+  response_status(request_id: number): number;
+  /** Get the response error for a request. */
+  response_error(request_id: number): string;
+
+  // --- Format ---
+  /** Set the response format for an endpoint ("json" or "flatbuffer"). */
+  set_format(endpoint_id: string, format: number): void;
+  /** Get the response format for an endpoint. */
+  endpoint_format(endpoint_id: string): number;
+
+  // --- FlatBuffer zero-copy ---
+  /** Get the pointer to FlatBuffer response data. */
+  response_ptr(request_id: number): number;
+  /** Get the length of FlatBuffer response data. */
+  response_len(request_id: number): number;
+
+  // --- Param normalization ---
+  /** Build URL with path param substitution + query params. */
+  build_url(endpoint_id: string, params_json: string): string;
+  /** Build request body from body-sourced params. */
+  build_body(endpoint_id: string, params_json: string): string;
+
+  // --- Cache ---
+  /** Set cache TTL for an endpoint in milliseconds. */
+  set_cache_ttl(endpoint_id: string, ttl_ms: number): void;
+  /** Whether a cached response exists for the given endpoint + params. */
+  is_cached(endpoint_id: string, params_json: string): boolean;
+  /** Get a cached response. */
+  cached_response(endpoint_id: string, params_json: string): string;
+  /** Invalidate cache for a specific endpoint. */
+  invalidate_cache(endpoint_id: string): void;
+  /** Invalidate all cached responses. */
+  invalidate_all_cache(): void;
+
+  // --- Info ---
+  /** Number of active (non-completed) requests. */
+  active_request_count(): number;
+  /** Get the state of a request as u8. */
+  request_state(request_id: number): number;
+  /** Number of registered endpoints. */
+  endpoint_count(): number;
+  /** Get an endpoint ID by index. */
+  endpoint_id(index: number): string;
+  /** Get the HTTP method of an endpoint. */
+  endpoint_method(id: string): string;
+  /** Get the path pattern of an endpoint. */
+  endpoint_path(id: string): string;
+
+  // --- Standard ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all API state to defaults. */
+  reset(): void;
+}
