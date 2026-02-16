@@ -39,6 +39,11 @@ import { /* store factories */ } from 'org-asm/model';
 | Per-field reactive state | `useFormField` | `(handle, name)` | `FieldState` |
 | Form-level state (submit btn) | `useFormState` | `(handle)` | `FormState` |
 | Share form across component tree | `createFormContext` | `<E>()` | `{ FormProvider, useForm, useField, useFormStatus }` |
+| Rust-owned table state | `useTableEngine` | `(engine, memory?)` | `TableHandle \| null` |
+| Per-row reactive state | `useTableRow` | `(handle, rowIndex)` | `RowState` |
+| Per-cell reactive state | `useTableCell` | `(handle, rowIndex, column)` | `CellState` |
+| Table-level state (pagination/sort) | `useTableState` | `(handle)` | `TableState` |
+| Share table across component tree | `createTableContext` | `<E>()` | `{ TableProvider, useTable, useRow, useCell, useTableStatus }` |
 | Catch WASM panics | `WasmErrorBoundary` | component | Renders fallback on error |
 | WebSocket/SSE connection | `useConnection` | `(config)` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM (frame-oriented) | `useWorker` | `(config)` | `{ loop, bridge, ready, error }` |
@@ -148,6 +153,30 @@ const { FormProvider, useForm, useField, useFormStatus } = createFormContext<MyF
 // Read: const { setField } = useForm(); const { value } = useField('name');
 ```
 
+### Rust-owned data table with server-side pagination
+```ts
+const engine = useMemo(() => new MyTableEngine(), []);
+const handle = useTableEngine(engine, wasmMemory);
+const { page, pageCount, sortColumn, sortDirection } = useTableState(handle);
+const { selected } = useTableRow(handle, rowIndex);
+const { value, error, dirty } = useTableCell(handle, rowIndex, 'price');
+
+// Two-phase fetch protocol
+useEffect(() => {
+  if (!handle?.needsFetch()) return;
+  const desc = JSON.parse(handle.queryDescriptor());
+  handle.acknowledgeFetch();
+  fetchPage(desc).then(({ bytes, total }) => handle.ingestPage(bytes, total));
+}, [handle?.needsFetch()]);
+```
+
+### Table context (no prop drilling)
+```ts
+const { TableProvider, useTable, useRow, useCell, useTableStatus } = createTableContext<MyTableEngine>();
+// Wrap: <TableProvider engine={engine} wasmMemory={memory}>...</TableProvider>
+// Read: const { toggleSort } = useTable(); const { selected } = useRow(0);
+```
+
 ### Search with debounce
 ```ts
 const results = useDebouncedWasmCall(
@@ -202,6 +231,11 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `useFormField` | Per-field subscription (value, error, showError) |
 | `useFormState` | Form-level subscription (isValid, canSubmit) |
 | `createFormContext` | Shared form context factory (Provider + hooks) |
+| `useTableEngine` | Create TableHandle wrapping Rust ITableEngine |
+| `useTableRow` | Per-row subscription (selection state) |
+| `useTableCell` | Per-cell subscription (edit value, error, dirty) |
+| `useTableState` | Table-level subscription (page, sort, filter, grouping) |
+| `createTableContext` | Shared table context factory (Provider + hooks) |
 | `WasmErrorBoundary` | Error boundary for WASM panics with reset |
 | `useConnection` | WebSocket/SSE with state tracking |
 | `useWorker` | Off-main-thread WASM via SharedArrayBuffer |
@@ -239,6 +273,11 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 | `IWizardFormEngine` | Multi-step form extension (step, advance, go_back) |
 | `FieldState` | Per-field snapshot (value, error, touched, dirty, showError) |
 | `FormState` | Form-level snapshot (isValid, isDirty, canSubmit) |
+| `ITableEngine` | Table engine contract (sort, filter, paginate, select, edit, group) |
+| `SortDirection` | Sort direction enum (None, Asc, Desc) |
+| `RowState` | Per-row snapshot (rowIndex, selected) |
+| `CellState` | Per-cell snapshot (value, error, dirty) |
+| `TableState` | Table-level snapshot (page, sort, filter, selection, edits, grouping) |
 | `WasmNotifier` | Pub/sub interface for useWasmState |
 | `IEngine<F>` | Model contract (tick, addDataPoint, openAction) |
 | `IAnimationLoop<F>` | Loop contract (start, stop, addConsumer) |
@@ -252,6 +291,7 @@ const book = useWasmSelector(notifier, () => ({ bid: engine.bid(), ask: engine.a
 4. `guides/data-pipeline.md` — WebSocket to engine to React data flow
 5. `guides/form-validation.md` — Rust-owned validation, useWasmCall + WasmResult
 5b. `guides/form-engine.md` — Full form engine: IFormEngine, per-field reactivity, wizards
+5c. `guides/data-table-engine.md` — Data table engine: ITableEngine, pagination, sort, filter, edit, group
 6. `guides/frame-buffer-design.md` — FlatBuffer frame protocol, zero-copy reads
 7. `guides/server-engine-pattern.md` — Server-side Rust engine, FlatBuffer broadcast
 

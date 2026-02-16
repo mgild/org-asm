@@ -318,3 +318,136 @@ export interface IWizardFormEngine extends IFormEngine {
   /** Go to the previous step. Returns success. */
   go_back(): boolean;
 }
+
+// ============================================
+// Table engine interfaces
+// ============================================
+
+/**
+ * ITableEngine — Rust-owned data table state contract.
+ *
+ * ALL table state lives in the WASM engine: sorting, filtering, pagination,
+ * row selection, cell editing, grouping/aggregation. TypeScript is a dumb
+ * row renderer that dispatches user actions and reads state back.
+ *
+ * Two-phase fetch protocol: When sort/filter/page changes, the engine sets
+ * needs_fetch=true and exposes query_descriptor() JSON. TypeScript reads it,
+ * fetches from server, calls ingest_page(bytes, total_rows). Engine sets
+ * needs_fetch=false.
+ *
+ * Implementors: Rust structs compiled to WASM with HashMap-based column
+ * storage, FlatBuffer page data, and per-cell edit overlay.
+ */
+export interface ITableEngine {
+  // --- Page data (FlatBuffer zero-copy) ---
+  /** Pointer to FlatBuffer bytes in WASM memory. */
+  page_ptr(): number;
+  /** Byte length of the current page data. */
+  page_len(): number;
+  /** Number of rows in the current page. */
+  row_count(): number;
+  /** Total rows across all pages (from server). */
+  total_row_count(): number;
+
+  // --- Ingest ---
+  /** Ingest a page of FlatBuffer data from the server. */
+  ingest_page(bytes: Uint8Array, total_rows: number): void;
+
+  // --- Pagination ---
+  /** Current page index (0-based). */
+  page(): number;
+  /** Rows per page. */
+  page_size(): number;
+  /** Total number of pages. */
+  page_count(): number;
+  /** Navigate to a specific page. Sets needs_fetch=true. */
+  set_page(page: number): void;
+  /** Change page size. Resets to page 0. Sets needs_fetch=true. */
+  set_page_size(size: number): void;
+
+  // --- Sort ---
+  /** Current sort column. Empty string = no sort. */
+  sort_column(): string;
+  /** Current sort direction: 0=none, 1=asc, 2=desc. */
+  sort_direction(): number;
+  /** Set sort column and direction. Sets needs_fetch=true. */
+  set_sort(column: string, direction: number): void;
+  /** Cycle sort: none → asc → desc → none. Sets needs_fetch=true. */
+  toggle_sort(column: string): void;
+
+  // --- Filter ---
+  /** Get filter value for a column. Empty string = no filter. */
+  filter_value(column: string): string;
+  /** Set filter value for a column. Resets to page 0. Sets needs_fetch=true. */
+  set_filter(column: string, value: string): void;
+  /** Clear all filters. Resets to page 0. Sets needs_fetch=true. */
+  clear_filters(): void;
+
+  // --- Selection ---
+  /** Whether a row is selected by index. */
+  is_row_selected(row_index: number): boolean;
+  /** Select a row by index. */
+  select_row(row_index: number): void;
+  /** Deselect a row by index. */
+  deselect_row(row_index: number): void;
+  /** Toggle a row's selection. */
+  toggle_row(row_index: number): void;
+  /** Select all rows on the current page. */
+  select_all(): void;
+  /** Deselect all rows. */
+  deselect_all(): void;
+  /** Number of currently selected rows. */
+  selected_count(): number;
+  /** Whether all rows on the current page are selected. */
+  all_selected(): boolean;
+
+  // --- Cell editing ---
+  /** Whether the table supports editing. */
+  is_editable(): boolean;
+  /** Get the edit overlay value (or original) for a cell. */
+  edit_value(row_index: number, column: string): string;
+  /** Set an edit value for a cell. */
+  set_edit_value(row_index: number, column: string, value: string): void;
+  /** Get the validation error for a cell. Empty string = valid. */
+  cell_error(row_index: number, column: string): string;
+  /** Whether a cell has been edited (differs from original). */
+  is_cell_dirty(row_index: number, column: string): boolean;
+  /** Whether any cells have pending edits. */
+  has_edits(): boolean;
+  /** Commit all dirty edits. Returns JSON of changed cells. */
+  commit_edits(): string;
+  /** Discard all pending edits. */
+  discard_edits(): void;
+
+  // --- Grouping / Aggregation ---
+  /** Current group-by column. Empty string = not grouped. */
+  group_by_column(): string;
+  /** Set the group-by column. Sets needs_fetch=true. */
+  set_group_by(column: string): void;
+  /** Clear grouping. Sets needs_fetch=true. */
+  clear_group_by(): void;
+  /** Number of groups in the current page. */
+  group_count(): number;
+  /** Label for a group by index. */
+  group_label(group_index: number): string;
+  /** Aggregation JSON for a group by index. */
+  group_row_count(group_index: number): string;
+  /** Whether a group is expanded. */
+  is_group_expanded(group_index: number): boolean;
+  /** Toggle a group's expanded state. */
+  toggle_group(group_index: number): void;
+
+  // --- Query descriptor ---
+  /** Whether the table needs to fetch new data from the server. */
+  needs_fetch(): boolean;
+  /** Acknowledge that a fetch has been initiated. */
+  acknowledge_fetch(): void;
+  /** JSON descriptor of the current query state. */
+  query_descriptor(): string;
+
+  // --- State ---
+  /** Monotonically increasing version — bumped on every state change. */
+  data_version(): number;
+  /** Reset all state to defaults. */
+  reset(): void;
+}

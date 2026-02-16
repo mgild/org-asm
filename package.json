@@ -52,6 +52,7 @@
     "schema",
     "model/engine-template.rs",
     "model/form-engine-template.rs",
+    "model/table-engine-template.rs",
     "model/Cargo.template.toml",
     "shared/lib-template.rs",
     "shared/validation-template.rs",
@@ -90,7 +91,8 @@
     "websocket",
     "validation",
     "forms",
-    "state-management"
+    "state-management",
+    "data-table"
   ],
   "license": "MIT",
   "dependencies": {

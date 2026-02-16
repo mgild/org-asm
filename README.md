@@ -105,6 +105,11 @@ Real-time paths use the frame buffer and direct DOM writes — React never sees 
 | Per-field form reactivity | `useFormField` | `FieldState` |
 | Form-level state | `useFormState` | `FormState` |
 | Share form across tree | `createFormContext` | `{ FormProvider, useForm, useField, useFormStatus }` |
+| Rust-owned table state | `useTableEngine` | `TableHandle \| null` |
+| Per-row table reactivity | `useTableRow` | `RowState` |
+| Per-cell table reactivity | `useTableCell` | `CellState` |
+| Table-level state | `useTableState` | `TableState` |
+| Share table across tree | `createTableContext` | `{ TableProvider, useTable, useRow, useCell, useTableStatus }` |
 | Catch WASM panics | `WasmErrorBoundary` | React component |
 | Manage WebSocket/SSE | `useConnection` | `{ pipeline, connected, state, error, stale }` |
 | Off-thread WASM | `useWorker` | `{ loop, bridge, ready, error }` |
@@ -510,6 +515,16 @@ Runs the full pipeline: `flatc` codegen (Rust + TS) → `wasm-pack build` → `c
 | `useFormState(handle)` | `FormState` | Form-level subscription — isValid, isDirty, canSubmit, hasBeenSubmitted, dataVersion |
 | `createFormContext<E>()` | `{ FormProvider, useForm, useField, useFormStatus }` | Context factory for sharing form across component tree without prop drilling |
 
+#### Table Engine
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `useTableEngine(engine, memory?)` | `TableHandle \| null` | Create dispatch handle wrapping a Rust ITableEngine -- sort, filter, paginate, select, edit, group |
+| `useTableRow(handle, rowIndex)` | `RowState` | Per-row subscription -- only re-renders when this row's selection state changes |
+| `useTableCell(handle, rowIndex, column)` | `CellState` | Per-cell subscription -- edit value, error, dirty state |
+| `useTableState(handle)` | `TableState` | Table-level subscription -- page, sort, filter, selection, edits, grouping, dataVersion |
+| `createTableContext<E>()` | `{ TableProvider, useTable, useRow, useCell, useTableStatus }` | Context factory for sharing table across component tree without prop drilling |
+
 #### Connection & Infrastructure
 
 | Hook | Returns | Description |
@@ -544,6 +559,7 @@ Creates a tick source that reads FlatBuffer frames zero-copy from WASM memory. P
 | `IWasmBinaryIngestEngine` | Binary frame ingestion via `ingest_frame()` for server engine pipeline |
 | `IFormEngine` | Form engine contract: `set_field()`, `submit()`, `field_error()`, `is_valid()` |
 | `IWizardFormEngine` | Multi-step form extension: `step()`, `advance()`, `go_back()` |
+| `ITableEngine` | Table engine contract: `set_page()`, `toggle_sort()`, `set_filter()`, `toggle_row()`, `set_edit_value()`, `set_group_by()` |
 | `WasmNotifier` | Pub/sub interface for `useWasmState` — `subscribe()`, `notify()`, `batch()` |
 
 ### View

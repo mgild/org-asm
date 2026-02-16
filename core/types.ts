@@ -142,3 +142,42 @@ export interface FormState {
   readonly dataVersion: number;
 }
 
+// ============================================
+// Table engine types
+// ============================================
+
+/** Sort direction for table columns. */
+export enum SortDirection { None = 0, Asc = 1, Desc = 2 }
+
+/** Per-row state snapshot. Read by useTableRow. */
+export interface RowState {
+  readonly rowIndex: number;
+  readonly selected: boolean;
+}
+
+/** Per-cell state snapshot. Read by useTableCell. */
+export interface CellState {
+  readonly value: string;
+  readonly error: string;
+  readonly dirty: boolean;
+}
+
+/** Top-level table state snapshot. Read by useTableState. */
+export interface TableState {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly pageCount: number;
+  readonly totalRowCount: number;
+  readonly rowCount: number;
+  readonly sortColumn: string;
+  readonly sortDirection: SortDirection;
+  readonly selectedCount: number;
+  readonly allSelected: boolean;
+  readonly hasEdits: boolean;
+  readonly isEditable: boolean;
+  readonly needsFetch: boolean;
+  readonly groupByColumn: string;
+  readonly groupCount: number;
+  readonly dataVersion: number;
+}
+
