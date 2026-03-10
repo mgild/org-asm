@@ -50,6 +50,16 @@
     "codegen",
     "dist",
     "schema",
+    "core",
+    "view",
+    "controller",
+    "model",
+    "react",
+    "shared",
+    "server",
+    "index.ts",
+    "tsconfig.json",
+    "tsconfig.vite.json",
     "model/engine-template.rs",
     "model/form-engine-template.rs",
     "model/table-engine-template.rs",
@@ -79,12 +89,12 @@
     "guides"
   ],
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.vite.json",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.vite.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.vite.json",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
@@ -119,7 +129,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "flatbuffers": "^24.0.0"
+    "flatbuffers": "^25.9.23"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
@@ -142,22 +152,19 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "^4.0.18",
-    "happy-dom": "^20.6.1",
+    "happy-dom": "^20.7.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "rxjs": "^7.8.0",
-    "typescript": "^5.7.0",
+    "rxjs": "^7.8.2",
+    "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0",
     "vitest": "^4.0.18",
-    "zustand": "^5.0.0"
-  },
-  "overrides": {
-    "rollup": "^4.59.0"
+    "zustand": "^5.0.11"
   }
 }

@@ -1,6 +1,6 @@
 # orgASM 💦🍆
 
-**Organized Assembly for Structured Machines.**
+**ORGanizedASM**
 
 A Rust-first MVC framework for React applications. All logic that can live in Rust, lives in Rust — state management, validation, data processing, real-time computation, business rules. TypeScript is reduced to a thin rendering and I/O layer.
 

@@ -10,11 +10,11 @@
     "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
+    "jsx": "react-jsx",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "lib": ["ES2022", "DOM"],
-    "types": [],
-    "jsx": "react-jsx"
+    "types": []
   },
   "include": [
     "index.ts",
