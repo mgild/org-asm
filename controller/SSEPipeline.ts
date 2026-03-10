@@ -80,9 +80,19 @@ export class SSEPipeline implements IConnectionPipeline {
     this.messageHandlers.push(handler);
     return this;
   }
+  offMessage(handler: MessageHandler): this {
+    const i = this.messageHandlers.indexOf(handler);
+    if (i >= 0) this.messageHandlers.splice(i, 1);
+    return this;
+  }
 
   onConnect(handler: ConnectionHandler): this {
     this.connectHandlers.push(handler);
+    return this;
+  }
+  offConnect(handler: ConnectionHandler): this {
+    const i = this.connectHandlers.indexOf(handler);
+    if (i >= 0) this.connectHandlers.splice(i, 1);
     return this;
   }
 
@@ -90,14 +100,29 @@ export class SSEPipeline implements IConnectionPipeline {
     this.disconnectHandlers.push(handler);
     return this;
   }
+  offDisconnect(handler: ConnectionHandler): this {
+    const i = this.disconnectHandlers.indexOf(handler);
+    if (i >= 0) this.disconnectHandlers.splice(i, 1);
+    return this;
+  }
 
   onStateChange(handler: StateChangeHandler): this {
     this.stateChangeHandlers.push(handler);
     return this;
   }
+  offStateChange(handler: StateChangeHandler): this {
+    const i = this.stateChangeHandlers.indexOf(handler);
+    if (i >= 0) this.stateChangeHandlers.splice(i, 1);
+    return this;
+  }
 
   onError(handler: ErrorHandler): this {
     this.errorHandlers.push(handler);
+    return this;
+  }
+  offError(handler: ErrorHandler): this {
+    const i = this.errorHandlers.indexOf(handler);
+    if (i >= 0) this.errorHandlers.splice(i, 1);
     return this;
   }
 

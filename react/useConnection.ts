@@ -54,16 +54,18 @@ export function useConnection(configOrPipeline: WebSocketConfig | IConnectionPip
   const pipeline = pipelineRef.current;
 
   useEffect(() => {
-    // Use onStateChange for tracking — leaves onConnect/onDisconnect free for user code
-    pipeline.onStateChange((newState) => {
+    const handleStateChange = (newState: ConnectionState) => {
       setState(newState);
       // Clear error on successful reconnect
       if (newState === ConnectionState.Connected) {
         setError(null);
       }
-    });
+    };
+    const handleError = (err: ConnectionError) => setError(err);
 
-    pipeline.onError((err) => setError(err));
+    // Use onStateChange for tracking — leaves onConnect/onDisconnect free for user code
+    pipeline.onStateChange(handleStateChange);
+    pipeline.onError(handleError);
 
     pipeline.connect();
 
@@ -74,6 +76,8 @@ export function useConnection(configOrPipeline: WebSocketConfig | IConnectionPip
 
     return () => {
       clearInterval(staleInterval);
+      pipeline.offStateChange(handleStateChange);
+      pipeline.offError(handleError);
       pipeline.disconnect();
       setState(ConnectionState.Disconnected);
       setStale(false);

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
 import { join, resolve, basename, dirname } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -141,7 +141,7 @@ Scaffold a new org-asm project with:
 
   // Make build.sh executable
   try {
-    execSync(`chmod +x "${join(projectDir, 'scripts/build.sh')}"`);
+    chmodSync(join(projectDir, 'scripts/build.sh'), 0o755);
   } catch {
     // Non-critical on Windows
   }
@@ -196,9 +196,9 @@ Run the full build pipeline:
         }
         mkdirSync(resolve('crates/engine/src/generated'), { recursive: true });
         for (const fbs of fbsFiles) {
-          const cmd = `flatc --rust -o crates/engine/src/generated/ schema/${fbs}`;
-          console.log(dim(`    $ ${cmd}`));
-          execSync(cmd, { stdio: 'inherit' });
+          const args = ['--rust', '-o', 'crates/engine/src/generated/', `schema/${fbs}`];
+          console.log(dim(`    $ flatc ${args.join(' ')}`));
+          execFileSync('flatc', args, { stdio: 'inherit' });
         }
       },
     },
@@ -213,9 +213,9 @@ Run the full build pipeline:
         }
         mkdirSync(resolve('src/generated'), { recursive: true });
         for (const fbs of fbsFiles) {
-          const cmd = `flatc --ts -o src/generated/ schema/${fbs}`;
-          console.log(dim(`    $ ${cmd}`));
-          execSync(cmd, { stdio: 'inherit' });
+          const args = ['--ts', '-o', 'src/generated/', `schema/${fbs}`];
+          console.log(dim(`    $ flatc ${args.join(' ')}`));
+          execFileSync('flatc', args, { stdio: 'inherit' });
         }
       },
     },
@@ -226,9 +226,9 @@ Run the full build pipeline:
         if (!existsSync(join(engineDir, 'Cargo.toml'))) {
           throw new Error('crates/engine/Cargo.toml not found. Run from project root.');
         }
-        const cmd = 'wasm-pack build crates/engine --target web --release --out-dir ../../src/pkg';
-        console.log(dim(`    $ ${cmd}`));
-        execSync(cmd, { stdio: 'inherit' });
+        const args = ['build', 'crates/engine', '--target', 'web', '--release', '--out-dir', '../../src/pkg'];
+        console.log(dim(`    $ wasm-pack ${args.join(' ')}`));
+        execFileSync('wasm-pack', args, { stdio: 'inherit' });
       },
     },
     {
@@ -238,9 +238,9 @@ Run the full build pipeline:
         if (!existsSync(join(serverDir, 'Cargo.toml'))) {
           throw new Error('crates/server/Cargo.toml not found. Run from project root.');
         }
-        const cmd = 'cargo build --release -p server';
-        console.log(dim(`    $ ${cmd}`));
-        execSync(cmd, { stdio: 'inherit' });
+        const args = ['build', '--release', '-p', 'server'];
+        console.log(dim(`    $ cargo ${args.join(' ')}`));
+        execFileSync('cargo', args, { stdio: 'inherit' });
       },
     },
   ];

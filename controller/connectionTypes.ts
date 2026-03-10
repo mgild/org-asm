@@ -22,18 +22,28 @@ export type ErrorHandler = (error: ConnectionError) => void;
 export interface IConnectionPipeline {
   /** Set the handler for incoming text messages */
   onMessage(handler: MessageHandler): this;
+  /** Remove a previously registered message handler */
+  offMessage(handler: MessageHandler): this;
 
   /** Set the handler for connection open */
   onConnect(handler: ConnectionHandler): this;
+  /** Remove a previously registered connect handler */
+  offConnect(handler: ConnectionHandler): this;
 
   /** Set the handler for connection close */
   onDisconnect(handler: ConnectionHandler): this;
+  /** Remove a previously registered disconnect handler */
+  offDisconnect(handler: ConnectionHandler): this;
 
   /** Set the handler for state transitions */
   onStateChange(handler: StateChangeHandler): this;
+  /** Remove a previously registered state change handler */
+  offStateChange(handler: StateChangeHandler): this;
 
   /** Set the handler for connection errors */
   onError(handler: ErrorHandler): this;
+  /** Remove a previously registered error handler */
+  offError(handler: ErrorHandler): this;
 
   /** Connect to the data source */
   connect(): void;
